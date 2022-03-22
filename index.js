@@ -1,15 +1,11 @@
-import Discord from 'discord.js';
+// Require the necessary discord.js classes
+const { Client, Intents } = require('discord.js');
+const { token } = require('./config.json');
 
-const client = new Discord.Client();
+const start = async () => {
+  const client = new Client({ intents: [Intents.FLAGS.GUILDS] });
 
-client.on('ready', () => {
-  console.log(`Logged in as ${client.user.tag}!`);
-});
+  await client.login(token);
+}
 
-client.on('message', msg => {
-  if (msg.content === 'ping') {
-    msg.reply('pong');
-  }
-});
-
-client.login('OTU1NjY1NDg3MDI1NTQxMTYw.Yjk-1w.reM-BaQHw0Lf8mZ3iuC6jq7jmQw');
+start();
