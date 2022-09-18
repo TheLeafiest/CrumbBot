@@ -1,5 +1,6 @@
 const { Client } = require('discord.js');
 const { token } = require('./config.json');
+const schedule = require('node-schedule');
 
 const start = async () => {
   const client = new Client({
@@ -18,15 +19,12 @@ const start = async () => {
     });
 
     if (channel) {
-      // Run every minute
-      setInterval(async () => {
-        const date = new Date();
-        if (date.getHours() == 14 && date.getMinutes() == 00) {
-          const message = await channel.send({ content: 'Chip Check', fetch: true });
-          message.react('<:Rounds:955271228833275944>');
-          message.react('<:Scoops:955271245706965032>');
-        }
-      }, 60000)
+      // Run every day at 2:00PM (local timezone)
+      schedule.scheduleJob('00 00 14 * * 0-6', async function() {
+        const message = await channel.send({ content: 'Chip Check', fetch: true });
+        message.react('<:Rounds:955271228833275944>');
+        message.react('<:Scoops:955271245706965032>');
+      });
     }
   });
 
