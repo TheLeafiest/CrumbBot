@@ -20,7 +20,7 @@ const start = async () => {
 
     if (channel) {
       // Run every day at 2:00PM (local timezone)
-      schedule.scheduleJob('00 00 14 * * 0-6', async function() {
+      schedule.scheduleJob('00 00 13 * * 0-6', async function() {
         const message = await channel.send({
           content: `Chip Check!\n
             <:heart:> = I'm doing really great!\n
