@@ -26,13 +26,9 @@ const start = async () => {
           fetch: true,
         });
 
-        await message.react('❤️');
-        await message.react('🧡');
-        await message.react('💛');
-        await message.react('💚');
-        await message.react('💙');
-        await message.react('💜');
-        await message.react('🤒');
+        await message.react('<:Rounds:955271228833275944>');
+        await message.react('<:Strips:1021193462743310428>');
+        await message.react('<:Scoops:955271245706965032>');
       });
     }
   });
