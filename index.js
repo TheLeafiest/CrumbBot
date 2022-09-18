@@ -21,9 +21,24 @@ const start = async () => {
     if (channel) {
       // Run every day at 2:00PM (local timezone)
       schedule.scheduleJob('00 00 14 * * 0-6', async function() {
-        const message = await channel.send({ content: 'Chip Check', fetch: true });
-        message.react('<:Rounds:955271228833275944>');
-        message.react('<:Scoops:955271245706965032>');
+        const message = await channel.send({
+          content: `Chip Check!\n
+            <:heart:> = I'm doing really great!\n
+            <:orange_heart:> = I'm doing pretty good.\n
+            <:yellow_heart:> = I'm doing okay, I guess.\n
+            <:green_heart:> = I'm starting to struggle.\n
+            <:blue_heart:> = I'm having a really hard time.\n
+            <:purple_heart:> = I need to reach out for support.\n
+            <:face_vomiting:> = I'm sick boys.`,
+          fetch: true,
+        });
+        message.react('<:heart:>');
+        message.react('<:orange_heart:>');
+        message.react('<:yellow_heart:>');
+        message.react('<:green_heart:>');
+        message.react('<:blue_heart:>');
+        message.react('<:purple_heart:>');
+        message.react('<:face_vomiting:>');
       });
     }
   });
