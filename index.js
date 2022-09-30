@@ -1,6 +1,11 @@
 const { Client } = require('discord.js');
-const { token } = require('./config.json');
+const {
+  token,
+  searchEngineId,
+  searchEngineApi,
+} = require('./config.json');
 const schedule = require('node-schedule');
+const GoogleImages = require('google-images');
 
 const start = async () => {
   const client = new Client({
@@ -10,6 +15,8 @@ const start = async () => {
       'GUILD_MESSAGE_REACTIONS',
     ]
   });
+  const imageClient = new GoogleImages(searchEngineId, searchEngineApi);
+  let images = [];
 
   // Handle "Chip Check"  
   client.on('ready', () => {
@@ -19,6 +26,12 @@ const start = async () => {
       return ch.type == 'GUILD_TEXT' && ch.name == 'chip-check';
     });
 
+    // Clear images every hour
+    schedule.scheduleJob('00 00 * * * *', function() {
+      images = [];
+    });
+
+    // Verify channel exists
     if (channel) {
       // Run every Monday, Wednesday, and Friday at 3:00PM (local timezone)
       schedule.scheduleJob('00 00 15 * * 1,3,5', async function() {
@@ -34,12 +47,29 @@ const start = async () => {
     }
   });
   
-  client.on('message', async msg => {
+  // Handle commands
+  client.on('messageCreate', async msg => {
     // Ignore messages from bot
     if (msg.author.bot) return;
 
     if (msg.content.includes('CRUMB ME')) {
-      await msg.channel.send('test');
+      const maxPage = 20;
+      const maxResults = 10;
+      const page = Math.floor(Math.random() * maxPage);
+      let result = Math.floor(Math.random() * maxResults);
+      let count = 1;
+
+      if (!images.length) {
+        console.log('hi');
+        images = await imageClient.search('crumbs', { page });
+      }
+
+      if (images[result].url) {
+        await msg.channel.send(images[result].url);
+      }
+      else {
+        await msg.channel.send('No image found, sorry 😢')
+      }
     }
   });
 
