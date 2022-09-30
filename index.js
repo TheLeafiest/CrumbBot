@@ -11,6 +11,7 @@ const start = async () => {
     ]
   });
 
+  // Handle "Chip Check"  
   client.on('ready', () => {
     console.log('Ready!');
 
@@ -30,6 +31,15 @@ const start = async () => {
         await message.react('<:Strips:1021193462743310428>');
         await message.react('<:Scoops:955271245706965032>');
       });
+    }
+  });
+  
+  client.on('message', async msg => {
+    // Ignore messages from bot
+    if (msg.author.bot) return;
+
+    if (msg.content.includes('CRUMB ME')) {
+      await msg.channel.send('test');
     }
   });
 
