@@ -60,7 +60,7 @@ const start = async () => {
       let count = 1;
 
       if (!images.length) {
-        console.log('hi');
+        console.log('images refreshed');
         images = await imageClient.search('crumbs', { page });
       }
 
