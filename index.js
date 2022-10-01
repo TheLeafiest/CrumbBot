@@ -16,6 +16,8 @@ const start = async () => {
     ]
   });
   const imageClient = new GoogleImages(searchEngineId, searchEngineApi);
+  const maxPage = 20;
+  const maxResult = 10;
   let images = [];
 
   // Handle "Chip Check"  
@@ -26,8 +28,8 @@ const start = async () => {
       return ch.type == 'GUILD_TEXT' && ch.name == 'chip-check';
     });
 
-    // Clear images every hour
-    schedule.scheduleJob('00 00 * * * *', function() {
+    // Clear images every half an hour
+    schedule.scheduleJob('* /30 * * * *', function() {
       images = [];
     });
 
@@ -52,15 +54,13 @@ const start = async () => {
     // Ignore messages from bot
     if (msg.author.bot) return;
 
+    // Check for command in all user messages
     if (msg.content.includes('CRUMB ME')) {
-      const maxPage = 20;
-      const maxResults = 10;
       const page = Math.floor(Math.random() * maxPage);
-      let result = Math.floor(Math.random() * maxResults);
-      let count = 1;
+      const result = Math.floor(Math.random() * maxResult);
 
+      // Images have been cleared; refresh images
       if (!images.length) {
-        console.log('images refreshed');
         images = await imageClient.search('crumbs', { page });
       }
 
