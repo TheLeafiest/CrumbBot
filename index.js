@@ -56,7 +56,9 @@ const start = async () => {
 
     // Check for command in all user messages
     if (msg.content.includes('CRUMB ME')) {
-      const page = Math.floor(Math.random() * maxPage);
+      // Minimum value of page is 1
+      const page = Math.floor(Math.random() * maxPage + 1);
+      // Minimum value of result is 0
       const result = Math.floor(Math.random() * maxResult);
 
       // Images have been cleared; refresh images
