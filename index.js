@@ -3,6 +3,7 @@ const {
   token,
   searchEngineId,
   searchEngineApi,
+  // birthdays,
 } = require('./config.json');
 const schedule = require('node-schedule');
 const GoogleImages = require('google-images');
@@ -18,33 +19,38 @@ const start = async () => {
   const imageClient = new GoogleImages(searchEngineId, searchEngineApi);
   const maxPage = 20;
   const maxResult = 10;
+  const chipCheckReactions = [
+    '<:Rounds:955271228833275944>',
+    '<:Strips:1021193462743310428>',
+    '<:Scoops:955271245706965032>',
+  ];
   let images = [];
 
-  // Handle "Chip Check"  
   client.on('ready', () => {
     console.log('Ready!');
 
-    const channel = client.channels.cache.find(ch => {
-      return ch.type == 'GUILD_TEXT' && ch.name == 'chip-check';
-    });
+    // const testChannel = client.channels.cache.find(ch => ch.type == 'GUILD_TEXT' && ch.name == 'bot-test')
+    const chipCheckChannel = client.channels.cache.find(ch => ch.type == 'GUILD_TEXT' && ch.name == 'chip-check');
 
     // Clear images every half an hour
-    schedule.scheduleJob('* /30 * * * *', function() {
+    schedule.scheduleJob('* /30 * * * *', () => {
       images = [];
     });
 
-    // Verify channel exists
-    if (channel) {
-      // Run every Monday, Wednesday, and Friday at 3:00PM (local timezone)
-      schedule.scheduleJob('00 00 15 * * 1,3,5', async function() {
-        const message = await channel.send({
+    if (chipCheckChannel) {
+      /*
+       * Handle "Chip Check"  
+       * Run every Monday, Wednesday, and Friday at 3:00PM (local timezone)
+       */
+      schedule.scheduleJob('00 00 15 * * 1,3,5', async () => {
+        const message = await chipCheckChannel.send({
           content: 'Chip Check!',
           fetch: true,
         });
 
-        await message.react('<:Rounds:955271228833275944>');
-        await message.react('<:Strips:1021193462743310428>');
-        await message.react('<:Scoops:955271245706965032>');
+        chipCheckReactions.forEach(async reaction => {
+          await message.react(reaction);
+        });
       });
     }
   });
