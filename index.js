@@ -59,12 +59,9 @@ const start = async () => {
       }
 
       if (!cancelJob) {
-        schedule.scheduleJob(`birthday_${user.id}`, `00 37 18 5 1 *`, async () => {
-          await testChannel.send(`Happy Birthday ${user.globalName}! :birthday:`);
+        schedule.scheduleJob(`birthday_${user.id}`, `00 00 8 ${user.day} ${user.month} *`, async () => {
+          await chipCheckChannel.send(`Happy Birthday ${user.globalName}! :birthday:`);
         });
-        // schedule.scheduleJob(`birthday_${user.id}`, `00 00 8 ${user.day} ${user.month} *`, async () => {
-        //   await chipCheckChannel.send(`Happy Birthday ${user.globalName}! :birthday:`);
-        // });
       }
     } else { // Initialize scheduled jobs for birthdays
       try {
