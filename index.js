@@ -22,12 +22,13 @@ const start = async () => {
       GatewayIntentBits.Guilds,
       GatewayIntentBits.GuildMessages,
       GatewayIntentBits.GuildMessageReactions,
+      GatewayIntentBits.MessageContent,
     ]
   });
   client.commands = new Collection();
   const imageClient = new GoogleImages(searchEngineId, searchEngineApi);
   let chipCheckChannel = null;
-  let testChannel = null;
+  // let testChannel = null;
   const maxPage = 20;
   const maxResult = 10;
   const foldersPath = path.join(__dirname, 'commands');
@@ -45,13 +46,35 @@ const start = async () => {
   let images = [];
 
   /**
-   * Helper function for scheduling birthdays
-   *
-   * @param {null | user{}} user 
-   * @param {null | boolean} cancelJob 
+   * Scheduling birthdays from birthdays.json
    */
-  const scheduleBirthdays = async (user = null, cancelJob = null) => {
-    // Add/remove scheduled job
+  const scheduleBirthdays = async () => {
+    try {
+      let data = {};
+      if (fs.existsSync(birthdaysPath)) {
+        data = JSON.parse(fs.readFileSync(birthdaysPath, { encoding: 'utf8', flag: 'r' }));
+      }
+      
+      // Schedule birthday messages for all users in birthdays.json
+      for (index in data) {
+        const { user, day, month } = data[index];
+
+        addBirthdayJob(user, day, month);
+      }
+    } catch (error) {
+      console.error(error);
+    }
+    // console.log(schedule.scheduledJobs);
+  };
+
+  /**
+   * Helper function to update and remove birthday jobs
+   * 
+   * @param {object} data 
+   * @param {boolean} cancelJob 
+   */
+  const updateRemoveBirthdayJobs = (data, cancelJob = false) => {
+    const { user, day, month } = data;
     if (user) {
       // Cancel the job if the user's birthday is removed or there is a pre-existing job for the user
       if (schedule.scheduledJobs[`birthday_${user.id}`]) {
@@ -59,33 +82,23 @@ const start = async () => {
       }
 
       if (!cancelJob) {
-        schedule.scheduleJob(`birthday_${user.id}`, `00 00 8 ${user.day} ${user.month} *`, async () => {
-          await chipCheckChannel.send(`Happy Birthday ${user.globalName}! :birthday:`);
-        });
-      }
-    } else { // Initialize scheduled jobs for birthdays
-      try {
-        let data = {};
-        if (fs.existsSync(birthdaysPath)) {
-          data = JSON.parse(fs.readFileSync(birthdaysPath, { encoding: 'utf8', flag: 'r' }));
-        }
-        
-        // Schedule birthday messages for all users in birthdays.json
-        for (index in data) {
-          const { user, day, month } = data[index];
-
-          schedule.scheduleJob(`birthday_${user.id}`, `00 37 18 5 1 *`, async () => {
-            await testChannel.send(`Happy Birthday ${user.globalName}! :birthday:`);
-          });
-          // schedule.scheduleJob(`birthday_${user.id}`, `00 00 8 ${day} ${month} *`, async () => {
-          //   await chipCheckChannel.send(`Happy Birthday ${user.globalName}! :birthday:`);
-          // });
-        }
-      } catch (error) {
-        console.error(error);
+        addBirthdayJob(user, day, month);
       }
     }
-    // console.log(schedule.scheduledJobs);
+  };
+
+  /**
+   * Helper function to add a birthday job
+   * 
+   * @param {object} user 
+   * @param {number} day 
+   * @param {number} month 
+   */
+  const addBirthdayJob = (user, day, month) => {
+    schedule.scheduleJob(`birthday_${user.id}`, `00 00 8 ${day} ${month} *`, async () => {
+      await chipCheckChannel.send(`Happy Birthday ${user.globalName}! :birthday:`);
+    });
+    // console.log(`Birthday created for ${user.globalName}`);
   };
 
   
@@ -129,6 +142,7 @@ const start = async () => {
 
     // Check for command in all user messages
     if (msg.content.includes('CRUMB ME')) {
+      // console.log('CRUMB ME detected');
       // Minimum value of page is 1
       const page = Math.floor(Math.random() * maxPage + 1);
       // Minimum value of result is 0
@@ -181,11 +195,12 @@ const start = async () => {
       // Add/remove scheduled birthday jobs
       if (birthdayCommands.includes(interaction.commandName)) {
         const cancelJob = interaction.commandName === birthdayCommands[1];
-        let user = interaction.options.getUser('user');
-        user.day = interaction.options.getNumber('day');
-        user.month = interaction.options.getNumber('month');
+        let data = {};
+        data.user = interaction.options.getUser('user');
+        data.day = interaction.options.getNumber('day');
+        data.month = interaction.options.getNumber('month');
   
-        await scheduleBirthdays(user, cancelJob);
+        updateRemoveBirthdayJobs(data, cancelJob);
       }
     } catch (error) {
       console.error(error);
