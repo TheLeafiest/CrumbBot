@@ -10,7 +10,8 @@ const schedule = require('node-schedule');
 const GoogleImages = require('google-images');
 const {
   token,
-  channelId,
+  generalChannelId,
+  chipCheckChannelId,
   testChannelId,
   searchEngineId,
   searchEngineApi,
@@ -27,6 +28,7 @@ const start = async () => {
   });
   client.commands = new Collection();
   const imageClient = new GoogleImages(searchEngineId, searchEngineApi);
+  let generalChannel = null;
   let chipCheckChannel = null;
   // let testChannel = null;
   const maxPage = 20;
@@ -96,7 +98,9 @@ const start = async () => {
    */
   const addBirthdayJob = (user, day, month) => {
     schedule.scheduleJob(`birthday_${user.id}`, `00 00 8 ${day} ${month} *`, async () => {
-      await chipCheckChannel.send(`Happy Birthday ${user.globalName}! :birthday:`);
+      if (generalChannel) {
+        await generalChannel.send(`Happy Birthday ${user.globalName}! :birthday:`);
+      }
     });
     // console.log(`Birthday created for ${user.globalName}`);
   };
@@ -104,9 +108,10 @@ const start = async () => {
   
   client.on(Events.ClientReady, async readyClient => {
     console.log(`Ready! Logged in as ${readyClient.user.tag}`);
-    // TODO store channel IDs in config.json
-    chipCheckChannel = client.channels.cache.get(channelId);
-    testChannel = client.channels.cache.get(testChannelId);
+
+    generalChannel = client.channels.cache.get(generalChannelId);
+    chipCheckChannel = client.channels.cache.get(chipCheckChannelId);
+    // testChannel = client.channels.cache.get(testChannelId);
 
     // Schedule clearing images every half an hour
     schedule.scheduleJob('clear-images', '* /30 * * * *', () => {
