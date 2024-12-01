@@ -1,21 +1,18 @@
-const {
-  Client,
-  Collection,
-  Events,
-  GatewayIntentBits,
-} = require('discord.js');
-const fs = require('node:fs');
-const path = require('node:path');
-const schedule = require('node-schedule');
-const GoogleImages = require('google-images');
+import { Client, Collection, Events, GatewayIntentBits } from 'discord.js';
+import { readdirSync, existsSync, readFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
+import { scheduledJobs, scheduleJob } from 'node-schedule';
+import GoogleImages from 'google-images';
+
+const __dirname = resolve();
 const {
   token,
   generalChannelId,
   chipCheckChannelId,
-  testChannelId,
+  // testChannelId,
   searchEngineId,
   searchEngineApi,
-} = require('./config.json');
+} = JSON.parse(readFileSync('./config.json'));
 
 const start = async () => {
   const client = new Client({
@@ -33,14 +30,14 @@ const start = async () => {
   // let testChannel = null;
   const maxPage = 20;
   const maxResult = 10;
-  const foldersPath = path.join(__dirname, 'commands');
-  const commandFolders = fs.readdirSync(foldersPath);
+  const foldersPath = join(__dirname, 'commands');
+  const commandFolders = readdirSync(foldersPath);
   const chipCheckReactions = [
     '<:Rounds:955271228833275944>',
     '<:Strips:1021193462743310428>',
     '<:Scoops:955271245706965032>',
   ];
-  const birthdaysPath = path.join(__dirname, 'birthdays.json')
+  const birthdaysPath = join(__dirname, 'birthdays.json')
   const birthdayCommands = [
     'add-birthday',
     'remove-birthday',
@@ -53,16 +50,16 @@ const start = async () => {
   const scheduleBirthdays = async () => {
     try {
       let data = {};
-      if (fs.existsSync(birthdaysPath)) {
-        data = JSON.parse(fs.readFileSync(birthdaysPath, { encoding: 'utf8', flag: 'r' }));
+      if (existsSync(birthdaysPath)) {
+        data = JSON.parse(readFileSync(birthdaysPath, { encoding: 'utf8', flag: 'r' }));
       }
       
       // Schedule birthday messages for all users in birthdays.json
-      for (index in data) {
-        const { user, day, month } = data[index];
+      Object.entries(data).forEach(([_, entry]) => {
+        const { user, day, month } = entry;
 
         addBirthdayJob(user, day, month);
-      }
+      });
     } catch (error) {
       console.error(error);
     }
@@ -79,8 +76,8 @@ const start = async () => {
     const { user, day, month } = data;
     if (user) {
       // Cancel the job if the user's birthday is removed or there is a pre-existing job for the user
-      if (schedule.scheduledJobs[`birthday_${user.id}`]) {
-        schedule.scheduledJobs[`birthday_${user.id}`].cancel();
+      if (scheduledJobs[`birthday_${user.id}`]) {
+        scheduledJobs[`birthday_${user.id}`].cancel();
       }
 
       if (!cancelJob) {
@@ -97,7 +94,7 @@ const start = async () => {
    * @param {number} month 
    */
   const addBirthdayJob = (user, day, month) => {
-    schedule.scheduleJob(`birthday_${user.id}`, `00 00 8 ${day} ${month} *`, async () => {
+    scheduleJob(`birthday_${user.id}`, `00 00 8 ${day} ${month} *`, async () => {
       if (generalChannel) {
         await generalChannel.send(`Happy Birthday ${user.globalName}! :birthday:`);
       }
@@ -114,7 +111,7 @@ const start = async () => {
     // testChannel = client.channels.cache.get(testChannelId);
 
     // Schedule clearing images every half an hour
-    schedule.scheduleJob('clear-images', '* /30 * * * *', () => {
+    scheduleJob('clear-images', '* /30 * * * *', () => {
       images = [];
     });
 
@@ -124,7 +121,7 @@ const start = async () => {
        * Handle "Chip Check"  
        * Run every Monday, Wednesday, and Friday at 3:00PM (local timezone)
        */
-      schedule.scheduleJob('chip-check', '00 00 15 * * 1,3,5', async () => {
+      scheduleJob('chip-check', '00 00 15 * * 1,3,5', async () => {
         const message = await chipCheckChannel.send({
           content: 'Chip Check!',
           fetch: true,
@@ -169,11 +166,11 @@ const start = async () => {
 
   // Set commands within a collection on client
   for (const folder of commandFolders) {
-    const commandsPath = path.join(foldersPath, folder);
-    const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith('.js'));
+    const commandsPath = join(foldersPath, folder);
+    const commandFiles = readdirSync(commandsPath).filter(file => file.endsWith('.js'));
     for (const file of commandFiles) {
-      const filePath = path.join(commandsPath, file);
-      const command = require(filePath);
+      const filePath = join(commandsPath, file);
+      const command = await import(filePath);
       // Set a new item in the Collection with the key as the command name and the value as the exported module
       if ('data' in command && 'execute' in command) {
         client.commands.set(command.data.name, command);
