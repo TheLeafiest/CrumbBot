@@ -12,7 +12,7 @@ const {
   // testChannelId,
   searchEngineId,
   searchEngineApi,
-} = JSON.parse(readFileSync('./config.json'));
+} = JSON.parse(readFileSync(join(__dirname, 'config.json')));
 
 const start = async () => {
   const client = new Client({

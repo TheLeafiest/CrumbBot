@@ -3,7 +3,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
 const __dirname = resolve()
-const { clientId, guildId, token } = JSON.parse(readFileSync('./config.json'));
+const { clientId, guildId, token } = JSON.parse(readFileSync(join(__dirname, 'config.json')));
 const commands = [];
 const foldersPath = join(__dirname, 'commands');
 const commandFolders = readdirSync(foldersPath);

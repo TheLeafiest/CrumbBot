@@ -1,7 +1,9 @@
 import { SlashCommandBuilder } from 'discord.js';
 import { readFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 
-const { serverOptions, serverUrl } = JSON.parse(readFileSync('./config.json'));
+const __dirname = resolve();
+const { serverOptions, serverUrl } = JSON.parse(readFileSync(join(__dirname, 'config.json')));
 
 export const data = new SlashCommandBuilder()
   .setName('command-server')
