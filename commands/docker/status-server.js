@@ -20,6 +20,10 @@ export async function execute(interaction) {
   await interaction.reply(`Retrieving status of ${server} server...`);
 
   try {
+    if (!serverOptions.includes(server)) {
+      throw new Error(`Unknown server: ${server}`);
+    }
+
     const response = await fetch(`${serverUrl}/${server}`);
     const data = await response.json();
 

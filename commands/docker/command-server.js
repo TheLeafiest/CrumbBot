@@ -33,6 +33,10 @@ export async function execute(interaction) {
   };
 
   try {
+    if (!serverOptions.includes(server)) {
+      throw new Error(`Unknown server: ${server}`);
+    }
+
     switch (command) {
       case 'start':
         commandResult.action = 'Starting';
