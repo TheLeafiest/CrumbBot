@@ -2,7 +2,6 @@ import { Client, Collection, Events, GatewayIntentBits } from 'discord.js';
 import { readdirSync, existsSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { scheduledJobs, scheduleJob } from 'node-schedule';
-import GoogleImages from 'google-images';
 
 const __dirname = resolve();
 const {
@@ -10,8 +9,6 @@ const {
   generalChannelId,
   chipCheckChannelId,
   // testChannelId,
-  searchEngineId,
-  searchEngineApi,
 } = JSON.parse(readFileSync(join(__dirname, 'config.json')));
 
 const start = async () => {
@@ -24,12 +21,10 @@ const start = async () => {
     ]
   });
   client.commands = new Collection();
-  const imageClient = new GoogleImages(searchEngineId, searchEngineApi);
+  const images = readdirSync(join(__dirname, 'images')).filter(fileName => fileName.endsWith('.jpg'));
   let generalChannel = null;
   let chipCheckChannel = null;
   // let testChannel = null;
-  const maxPage = 20;
-  const maxResult = 10;
   const foldersPath = join(__dirname, 'commands');
   const commandFolders = readdirSync(foldersPath);
   const chipCheckReactions = [
@@ -42,7 +37,6 @@ const start = async () => {
     'add-birthday',
     'remove-birthday',
   ];
-  let images = [];
 
   /**
    * Scheduling birthdays from birthdays.json
@@ -110,11 +104,6 @@ const start = async () => {
     chipCheckChannel = client.channels.cache.get(chipCheckChannelId);
     // testChannel = client.channels.cache.get(testChannelId);
 
-    // Schedule clearing images every half an hour
-    scheduleJob('clear-images', '* /30 * * * *', () => {
-      images = [];
-    });
-
     // Schedule "Chip Check!"
     if (chipCheckChannel) {
       /*
@@ -137,26 +126,21 @@ const start = async () => {
     await scheduleBirthdays();
   });
   
-  // Handle sending image for message that contains 'CRUMB ME'
+  // Handle sending an image for message that contains 'CRUMB ME'
   client.on(Events.MessageCreate, async msg => {
     // Ignore messages from bot
     if (msg.author.bot) return;
 
     // Check for command in all user messages
     if (msg.content.includes('CRUMB ME')) {
-      // console.log('CRUMB ME detected');
-      // Minimum value of page is 1
-      const page = Math.floor(Math.random() * maxPage + 1);
-      // Minimum value of result is 0
-      const result = Math.floor(Math.random() * maxResult);
+      // Randomly select image
+      const result = Math.floor(Math.random() * images.length);
 
-      // Images have been cleared; refresh images
-      if (!images.length) {
-        images = await imageClient.search('crumbs', { page });
-      }
-
-      if (images[result].url) {
-        await msg.channel.send(images[result].url);
+      if (images[result]) {
+        await msg.channel.send({ files: [{
+          attachment: join(__dirname, 'images', images[result]),
+          name: images[result],
+        }] });
       }
       else {
         await msg.channel.send('No image found, sorry 😢')
