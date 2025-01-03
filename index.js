@@ -21,7 +21,6 @@ const start = async () => {
     ]
   });
   client.commands = new Collection();
-  const images = readdirSync(join(__dirname, 'images')).filter(fileName => fileName.endsWith('.jpg'));
   let generalChannel = null;
   let chipCheckChannel = null;
   // let testChannel = null;
@@ -133,6 +132,7 @@ const start = async () => {
 
     // Check for command in all user messages
     if (msg.content.includes('CRUMB ME')) {
+      const images = readdirSync(join(__dirname, 'images')).filter(fileName => fileName.endsWith('.jpg'));
       // Randomly select image
       const result = Math.floor(Math.random() * images.length);
 
