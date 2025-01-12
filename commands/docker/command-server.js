@@ -72,7 +72,7 @@ export async function execute(interaction) {
         throw new Error(`No info found for the ${server} server`);
       }
 
-      await interaction.followUp(`${serverInfo[server]}`);
+      await interaction.followUp(`${JSON.stringify(serverInfo[server], null, 2)}`);
       return;
     }
 
