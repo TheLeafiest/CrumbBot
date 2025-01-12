@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
 const __dirname = resolve();
-const { serverOptions, serverUrl } = JSON.parse(readFileSync(join(__dirname, 'config.json')));
+const { serverOptions, serverUrl, serverInfo } = JSON.parse(readFileSync(join(__dirname, 'config.json')));
 
 export const data = new SlashCommandBuilder()
   .setName('command-server')
@@ -21,6 +21,7 @@ export const data = new SlashCommandBuilder()
     .addChoices(...[
       { name: 'start', value: 'start' },
       { name: 'stop', value: 'stop' },
+      { name: 'info', value: 'info' },
       { name: 'restart', value: 'restart' },
     ])
   );
@@ -46,6 +47,10 @@ export async function execute(interaction) {
         commandResult.action = 'Stopping';
         commandResult.response = 'stopped';
         break;
+      case 'info':
+        commandResult.action = 'Retrieving info for';
+        commandResult.response = null;
+        break;
       case 'restart':
         commandResult.action = 'Restarting';
         commandResult.response = 'restarted';
@@ -61,6 +66,16 @@ export async function execute(interaction) {
     }
 
     await interaction.reply(`${commandResult.action} ${server} server...`);
+
+    if (command === 'info') {
+      if (!serverInfo[server]) {
+        throw new Error(`No info found for the ${server} server`);
+      }
+
+      await interaction.followUp(`${serverInfo[server]}`);
+      return;
+    }
+
     const response = await fetch(`${serverUrl}/${server}/${command}`);
 
     if (response.status !== 200) {
