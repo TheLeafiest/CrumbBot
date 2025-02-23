@@ -22,7 +22,7 @@ export const data = new SlashCommandBuilder()
       { name: 'start', value: 'start' },
       { name: 'stop', value: 'stop' },
       { name: 'info', value: 'info' },
-      { name: 'status', value: null },
+      { name: 'status', value: 'status' },
       { name: 'restart', value: 'restart' },
     ])
   );
@@ -80,7 +80,9 @@ export async function execute(interaction) {
       return;
     }
 
-    const response = await fetch(`${serverUrl}/${server}/${command}`);
+    const url = command === 'status' ? `${serverUrl}/${server}` : `${serverUrl}/${server}/${command}`;
+
+    const response = await fetch(url);
 
     if (response.status !== 200) {
       throw new Error(`Server responded with status code ${response.status}`);
