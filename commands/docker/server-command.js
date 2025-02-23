@@ -6,17 +6,17 @@ const __dirname = resolve();
 const { serverOptions, serverUrl, serverInfo } = JSON.parse(readFileSync(join(__dirname, 'config.json')));
 
 export const data = new SlashCommandBuilder()
-  .setName('command-server')
-  .setDescription('Command a selected server')
+  .setName('server-command')
+  .setDescription('Send a command to a selected server')
   .addStringOption(option => option.setName('server')
-    .setDescription('The server to command')
+    .setDescription('The server to send a command to')
     .setRequired(true)
     .addChoices(...serverOptions.map(server => {
       return { name: server, value: server };
     }))
   )
   .addStringOption(option => option.setName('command')
-    .setDescription('The command to run')
+    .setDescription('The command to send to the server')
     .setRequired(true)
     .addChoices(...[
       { name: 'start', value: 'start' },
