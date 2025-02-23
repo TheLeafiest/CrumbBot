@@ -22,6 +22,7 @@ export const data = new SlashCommandBuilder()
       { name: 'start', value: 'start' },
       { name: 'stop', value: 'stop' },
       { name: 'info', value: 'info' },
+      { name: 'status', value: null },
       { name: 'restart', value: 'restart' },
     ])
   );
@@ -48,7 +49,10 @@ export async function execute(interaction) {
         commandResult.response = 'stopped';
         break;
       case 'info':
-        commandResult.action = 'Retrieving info for';
+        commandResult.action = 'Getting info for';
+        commandResult.response = null;
+      case 'status':
+        commandResult.action = 'Checking status of';
         commandResult.response = null;
         break;
       case 'restart':
