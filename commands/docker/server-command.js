@@ -88,7 +88,12 @@ export async function execute(interaction) {
       throw new Error(`Server responded with status code ${response.status}`);
     }
 
-    await interaction.followUp(`Successfully ${commandResult.response} the ${server} server`);
+    if (command === 'status') {
+      const data = await response.json();
+      await interaction.followUp(`${server} server: ${data.status}`);
+    } else {
+      await interaction.followUp(`Successfully ${commandResult.response} the ${server} server`);
+    }
   } catch (error) {
     await interaction.followUp(`There was an error while starting the ${server} server: ${error}`);
     console.log(error);
