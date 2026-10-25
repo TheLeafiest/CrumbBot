@@ -34,14 +34,20 @@ client.once(Events.ClientReady, readyClient => {
   console.log(`Ready! Logged in as ${readyClient.user.tag}`);
 
   const generalChannel = sendable(client.channels.cache.get(config.generalChannelId));
-  const chipCheckChannel = sendable(client.channels.cache.get(config.chipCheckChannelId));
+  const { chipCheck } = config;
 
-  if (chipCheckChannel) {
-    /*
-     * Handle "Chip Check"
-     * Run every Monday, Wednesday, and Friday at 3:00PM (container timezone)
-     */
-    scheduleJob('chip-check', '00 00 15 * * 1,3,5', () => postChipCheck(chipCheckChannel));
+  if (chipCheck) {
+    // Chip Check: a scheduled post members react to (container timezone). Off unless configured
+    const { channelId, schedule } = chipCheck;
+    const chipCheckChannel = sendable(client.channels.cache.get(channelId));
+
+    if (!chipCheckChannel) {
+      console.error(`Chip Check is OFF: channel ${channelId} isn't a channel the bot can post in (check chipCheck.channelId)`);
+    } else if (!scheduleJob('chip-check', schedule, () => postChipCheck(chipCheckChannel, chipCheck))) {
+      console.error(`Chip Check is OFF: "${schedule}" isn't a valid schedule (check chipCheck.schedule)`);
+    } else {
+      console.log(`Chip Check: on, "${schedule}" in #${'name' in chipCheckChannel ? chipCheckChannel.name : channelId}`);
+    }
   }
 
   // Schedule birthday message jobs
@@ -73,11 +79,19 @@ async function reportInteractionError(interaction: RepliableInteraction): Promis
   }
 }
 
-// Handle slash commands and form submissions
+// Handle slash commands, form submissions and buttons
 client.on(Events.InteractionCreate, async interaction => {
-  if (!interaction.isChatInputCommand() && !interaction.isModalSubmit()) return;
+  if (!interaction.isChatInputCommand() && !interaction.isModalSubmit() && !interaction.isButton()) return;
 
   try {
+    if (interaction.isButton()) {
+      if (!await gameRequests?.handleButton(interaction)) {
+        console.error(`No handler for button ${interaction.customId}.`);
+      }
+
+      return;
+    }
+
     if (interaction.isModalSubmit()) {
       if (!await gameRequests?.handleModalSubmit(interaction)) {
         console.error(`No handler for form ${interaction.customId}.`);

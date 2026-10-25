@@ -10,13 +10,30 @@ export interface Config {
   clientId: string;
   guildId: string;
   generalChannelId: string;
-  chipCheckChannelId: string;
   serverOptions: string[];
   serverUrl: string;
   serverInfo: Record<string, unknown>;
   // Ideas and bug reports for gameTest; the feature is off when this block is absent
   gameRequests?: GameRequestsConfig;
+  // A scheduled post members react to; off when this block is absent
+  chipCheck?: ChipCheckConfig;
 }
+
+export interface ChipCheckConfig {
+  channelId: string;
+  // node-schedule cron with seconds: second minute hour day-of-month month day-of-week
+  schedule: string;
+  message: string;
+  // Added in order: unicode emoji ("👍") or custom emoji ("<:Name:id>")
+  reactions: string[];
+}
+
+// The Crumb Crew's original Chip Check: Monday, Wednesday and Friday at 3:00 PM
+const chipCheckDefaults = {
+  schedule: '00 00 15 * * 1,3,5',
+  message: 'Chip Check!',
+  reactions: [] as string[],
+};
 
 export interface GameRequestsConfig {
   forumChannelId: string;
@@ -53,12 +70,57 @@ function parseGameRequests(raw: unknown, problems: string[]): GameRequestsConfig
   return { forumChannelId, approverRoleId, maxOpenPerUser } as GameRequestsConfig;
 }
 
+function parseChipCheck(raw: unknown, problems: string[]): ChipCheckConfig | undefined {
+  if (raw === undefined) {
+    return undefined;
+  }
+
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+    problems.push('"chipCheck" must be an object');
+    return undefined;
+  }
+
+  const {
+    channelId,
+    schedule = chipCheckDefaults.schedule,
+    message = chipCheckDefaults.message,
+    reactions = chipCheckDefaults.reactions,
+  } = raw as Record<string, unknown>;
+
+  for (const [key, value] of Object.entries({ channelId, schedule, message })) {
+    if (typeof value !== 'string' || value === '') {
+      problems.push(`"chipCheck.${key}" must be a non-empty string`);
+    }
+  }
+
+  if (!Array.isArray(reactions) || !reactions.every(reaction => typeof reaction === 'string' && reaction !== '')) {
+    problems.push('"chipCheck.reactions" must be a list of emoji');
+  }
+
+  return { channelId, schedule, message, reactions } as ChipCheckConfig;
+}
+
+/**
+ * Parse an optional feature's block. A bad block turns only that feature off, with every
+ * problem logged; it must not take the whole bot down
+ */
+function parseOptional<T>(offMessage: string, raw: unknown, parse: (raw: unknown, problems: string[]) => T | undefined): T | undefined {
+  const problems: string[] = [];
+  const parsed = parse(raw, problems);
+
+  if (problems.length > 0) {
+    console.error(`${offMessage}: invalid config.json:\n  - ${problems.join('\n  - ')}`);
+    return undefined;
+  }
+
+  return parsed;
+}
+
 const requiredStrings = [
   'token',
   'clientId',
   'guildId',
   'generalChannelId',
-  'chipCheckChannelId',
   'serverUrl',
 ] as const;
 
@@ -92,16 +154,14 @@ export function parseConfig(raw: unknown): Config {
     throw new Error(`Invalid config.json:\n  - ${problems.join('\n  - ')}`);
   }
 
-  // An optional feature with a bad config turns itself off; it must not take the bot down
-  const gameRequestProblems: string[] = [];
-  let gameRequests = parseGameRequests(value.gameRequests, gameRequestProblems);
+  const gameRequests = parseOptional('Game requests are OFF', value.gameRequests, parseGameRequests);
+  const chipCheck = parseOptional('Chip Check is OFF', value.chipCheck, parseChipCheck);
 
-  if (gameRequestProblems.length > 0) {
-    console.error(`Game requests are OFF: invalid config.json:\n  - ${gameRequestProblems.join('\n  - ')}`);
-    gameRequests = undefined;
+  if (value.chipCheckChannelId !== undefined && value.chipCheck === undefined) {
+    console.log('Chip Check is off: "chipCheckChannelId" is no longer used. To turn Chip Check on, add a "chipCheck" block (see README).');
   }
 
-  return { ...value, gameRequests } as unknown as Config;
+  return { ...value, gameRequests, chipCheck } as unknown as Config;
 }
 
 export function loadConfig(path = join(dataDir, 'config.json')): Config {

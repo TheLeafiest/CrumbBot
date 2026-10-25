@@ -7,6 +7,9 @@ import {
   ModalBuilder,
   SlashCommandBuilder,
   TextInputBuilder,
+  TextInputStyle,
+  type AnyThreadChannel,
+  type ButtonInteraction,
   type Client,
   type ModalSubmitInteraction,
 } from 'discord.js';
@@ -14,6 +17,20 @@ import type { Command } from '../commands/types.js';
 import type { GameRequestsConfig } from '../config.js';
 import { loadGameRequestsForum, statusTags, type GameRequestsForum, type TagName } from './forum.js';
 import { buildPostContent, echoSubmission, openStatusTags, parseSubmitterId, submissionForms, type SubmissionType } from './posts.js';
+import {
+  actionsByStatus,
+  hasRole,
+  isTriageAction,
+  nextTags,
+  outcomeMessage,
+  parseThreadReference,
+  readTags,
+  triageActions,
+  triageButtonPrefix,
+  triageReasonPrefix,
+  triageRow,
+  type TriageAction,
+} from './triage.js';
 
 const modalPrefix = 'gr:submit:';
 const voteEmoji = '👍';
@@ -25,6 +42,48 @@ export interface GameRequests {
   start(client: Client<true>): Promise<void>;
   // Handle a form submission if it belongs to this feature; false if it doesn't
   handleModalSubmit(interaction: ModalSubmitInteraction): Promise<boolean>;
+  // Handle a triage button click if it belongs to this feature; false if it doesn't
+  handleButton(interaction: ButtonInteraction): Promise<boolean>;
+}
+
+type TriageInteraction = ButtonInteraction | ModalSubmitInteraction;
+
+// The extra question asked before a decision, for the decisions that need one
+const reasonForms: Partial<Record<TriageAction, { title: string; label: string; description: string; required: boolean; style: TextInputStyle }>> = {
+  decline: {
+    title: 'Decline this post',
+    label: 'Why? (shown to the submitter)',
+    description: 'Optional, but it helps them understand',
+    required: false,
+    style: TextInputStyle.Paragraph,
+  },
+  duplicate: {
+    title: 'Mark as a duplicate',
+    label: 'Link to the original post',
+    description: 'Right-click the original post, Copy Link, and paste it here',
+    required: true,
+    style: TextInputStyle.Short,
+  },
+};
+
+function buildReasonModal(action: TriageAction): ModalBuilder | null {
+  const form = reasonForms[action];
+
+  if (!form) {
+    return null;
+  }
+
+  return new ModalBuilder()
+    .setCustomId(`${triageReasonPrefix}${action}`)
+    .setTitle(form.title)
+    .addLabelComponents(new LabelBuilder()
+      .setLabel(form.label)
+      .setDescription(form.description)
+      .setTextInputComponent(new TextInputBuilder()
+        .setCustomId('reason')
+        .setStyle(form.style)
+        .setRequired(form.required)
+        .setMaxLength(500)));
 }
 
 const isSubmissionType = (type: string): type is SubmissionType => Object.hasOwn(submissionForms, type);
@@ -130,6 +189,7 @@ export function createGameRequests(config: GameRequestsConfig): GameRequests {
           content: buildPostContent(type, userId, values),
           // The submitter is added to the thread below, so the mention doesn't need to ping
           allowedMentions: { parse: [] },
+          components: [triageRow(statusTags.new)],
         },
         appliedTags: [tagId(loaded, form.tag), tagId(loaded, statusTags.new)],
       });
@@ -159,6 +219,95 @@ export function createGameRequests(config: GameRequestsConfig): GameRequests {
     }
   }
 
+  /**
+   * The post a triage click or form is for, once the member is confirmed as an approver and the
+   * decision fits the post's current status. Otherwise replies privately and returns null.
+   * Nothing is awaited before the checks, so a button can still open a form within 3 seconds
+   */
+  async function triageTarget(interaction: TriageInteraction, action: TriageAction): Promise<AnyThreadChannel | null> {
+    const refuse = async (content: string) => {
+      await interaction.reply({ content, flags: MessageFlags.Ephemeral });
+      return null;
+    };
+
+    if (!loaded) {
+      return refuse(unavailableMessage);
+    }
+
+    if (!hasRole(interaction.member, config.approverRoleId)) {
+      return refuse('Only approvers can make decisions on posts.');
+    }
+
+    const thread = interaction.channel;
+
+    if (!thread?.isThread() || thread.parentId !== loaded.forum.id) {
+      return refuse('These buttons only work on posts in the game ideas forum.');
+    }
+
+    // A stale button, e.g. clicked twice or on a message that missed an update
+    const { status } = readTags(thread.appliedTags, loaded.tagIds);
+
+    if (!status || !actionsByStatus[status].includes(action)) {
+      return refuse(`This post is ${status ? `already **${status}**` : 'missing its status tag'}, so it can't be marked **${triageActions[action].to}**.`);
+    }
+
+    return thread;
+  }
+
+  /**
+   * Apply a decision: swap the status tag, tell the submitter in the thread, update the
+   * buttons, and lock and archive decided posts. The interaction must already be deferred
+   */
+  async function decide(
+    interaction: TriageInteraction,
+    thread: AnyThreadChannel,
+    action: TriageAction,
+    details: { reason?: string; originalThreadId?: string } = {},
+  ): Promise<void> {
+    if (!loaded) {
+      return;
+    }
+
+    const { to, closes } = triageActions[action];
+
+    try {
+      const starter = await thread.fetchStarterMessage().catch(() => null);
+      const submitterId = starter ? parseSubmitterId(starter.content) : null;
+      const { type } = readTags(thread.appliedTags, loaded.tagIds);
+
+      // Archived or locked posts can't be changed, so open them first and close them again last
+      if (thread.archived) {
+        await thread.setArchived(false);
+      }
+
+      if (thread.locked && !closes) {
+        await thread.setLocked(false);
+      }
+
+      await thread.setAppliedTags(nextTags(thread.appliedTags, loaded.tagIds, to));
+      await thread.send({
+        content: outcomeMessage(action, { submitterId, type, approverName: interaction.user.displayName, ...details }),
+        // Ping the submitter only
+        allowedMentions: { users: submitterId ? [submitterId] : [] },
+      });
+
+      // Posts made by hand have no bot-owned starter message to put buttons on
+      if (starter?.editable) {
+        await starter.edit({ components: [triageRow(to)] });
+      }
+
+      if (closes) {
+        await thread.setLocked(true);
+        await thread.setArchived(true);
+      }
+
+      await interaction.editReply(`Done: this post is now **${to}**.`);
+    } catch (error) {
+      console.error(`Failed to mark game request ${thread.id} as ${to}:`, error);
+      await interaction.editReply(`Something went wrong marking this post **${to}**: ${error}`);
+    }
+  }
+
   return {
     commands: [
       command('idea', 'Suggest an idea for the game'),
@@ -170,6 +319,10 @@ export function createGameRequests(config: GameRequestsConfig): GameRequests {
     },
 
     async handleModalSubmit(interaction) {
+      if (interaction.customId.startsWith(triageReasonPrefix)) {
+        return submitReason(interaction);
+      }
+
       if (!interaction.customId.startsWith(modalPrefix)) {
         return false;
       }
@@ -183,5 +336,73 @@ export function createGameRequests(config: GameRequestsConfig): GameRequests {
       await submit(interaction, type);
       return true;
     },
+
+    async handleButton(interaction) {
+      if (!interaction.customId.startsWith(triageButtonPrefix)) {
+        return false;
+      }
+
+      const action = interaction.customId.slice(triageButtonPrefix.length);
+
+      if (!isTriageAction(action)) {
+        return false;
+      }
+
+      const thread = await triageTarget(interaction, action);
+
+      if (!thread) {
+        return true;
+      }
+
+      // Decline and Duplicate ask one more question first
+      const reasonModal = buildReasonModal(action);
+
+      if (reasonModal) {
+        await interaction.showModal(reasonModal);
+        return true;
+      }
+
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+      await decide(interaction, thread, action);
+      return true;
+    },
   };
+
+  /**
+   * The answer to Decline's "why?" or Duplicate's "link to the original"
+   */
+  async function submitReason(interaction: ModalSubmitInteraction): Promise<boolean> {
+    const action = interaction.customId.slice(triageReasonPrefix.length);
+
+    if (!isTriageAction(action)) {
+      return false;
+    }
+
+    // Checked again: the post may have changed while the form was open
+    const thread = await triageTarget(interaction, action);
+
+    if (!thread) {
+      return true;
+    }
+
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    const answer = interaction.fields.getTextInputValue('reason').trim();
+
+    if (action !== 'duplicate') {
+      await decide(interaction, thread, action, { reason: answer || undefined });
+      return true;
+    }
+
+    const originalId = parseThreadReference(answer);
+    const original = originalId ? await interaction.client.channels.fetch(originalId).catch(() => null) : null;
+
+    if (!original?.isThread() || original.parentId !== loaded?.forum.id || original.id === thread.id) {
+      await interaction.editReply('That doesn\'t look like a link to another post in the game ideas forum. '
+        + 'Right-click the original post, choose Copy Link, and try again.');
+      return true;
+    }
+
+    await decide(interaction, thread, action, { originalThreadId: original.id });
+    return true;
+  }
 }

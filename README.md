@@ -29,12 +29,11 @@ npm start
 | `clientId` | string | Application ID |
 | `guildId` | string | Server the slash commands are registered in |
 | `generalChannelId` | string | Channel for birthday messages |
-| `chipCheckChannelId` | string | Channel for Chip Check |
 | `serverOptions` | string[] | Game servers offered by `/server-command` |
 | `serverUrl` | string | Base URL of the game-server control API |
 | `serverInfo` | object | Per-server details shown by `/server-command info` |
-
 | `gameRequests` | object, optional | Ideas and bug reports forum (below). Leave out to turn the feature off |
+| `chipCheck` | object, optional | Scheduled check-in post (below). Leave out to turn it off |
 
 The bot checks these at startup and lists every missing or invalid key.
 
@@ -65,6 +64,43 @@ triage them. To set it up:
 On startup the log shows `Game requests: ready in #game-ideas`, or `Game requests are OFF`
 followed by every problem it found (wrong channel, missing tags, missing permissions or an
 unknown role).
+
+**Submitting.** `/idea` and `/bug` open a form. Each submission becomes a post tagged `Idea`
+or `Bug` and `New`, with the submitter added to the thread and a 👍 for votes. A member can
+have `maxOpenPerUser` posts that are `New` or `Approved` at once.
+
+**Deciding.** Each post carries buttons for the decisions that fit its status. Everyone sees
+them, but only members with the approver role can use them:
+
+| Status | Buttons |
+|---|---|
+| New | Approve, Decline (asks why), Duplicate (asks for the original post's link) |
+| Approved | Shipped, Decline |
+| Declined, Duplicate, Shipped | Reopen |
+
+A decision swaps the status tag and posts the outcome in the thread, pinging the submitter.
+Declined, Duplicate and Shipped posts are locked and archived; Reopen undoes that.
+
+### Chip Check
+
+A scheduled post that members answer by reacting, originally the Crumb Crew's Monday,
+Wednesday and Friday check-in. It is off unless `config.json` has a `chipCheck` block:
+
+```json
+"chipCheck": {
+  "channelId": "<channel id>",
+  "schedule": "00 00 15 * * 1,3,5",
+  "message": "Chip Check!",
+  "reactions": ["👍", "<:CustomEmoji:123456789012345678>"]
+}
+```
+
+Only `channelId` is required. `schedule` is a cron expression with seconds (second, minute,
+hour, day of month, month, day of week) in the container's timezone; the default is 3:00 PM
+on Monday, Wednesday and Friday. `reactions` are added in order and may be standard emoji or
+the server's custom emoji (`<:Name:id>`; type `\:Name:` in Discord to see one's id).
+
+The older `chipCheckChannelId` key is no longer used.
 
 ## Deploying
 
