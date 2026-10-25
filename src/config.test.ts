@@ -38,16 +38,18 @@ test('game requests are optional, and default the open cap to 3', () => {
   );
 });
 
-test('reports problems inside the game requests block', () => {
-  assert.throws(
-    () => parseConfig({ ...valid, gameRequests: { forumChannelId: '', maxOpenPerUser: 0 } }),
-    (error: Error) => {
-      assert.match(error.message, /gameRequests\.forumChannelId/);
-      assert.match(error.message, /gameRequests\.approverRoleId/);
-      assert.match(error.message, /gameRequests\.maxOpenPerUser/);
-      return true;
-    },
-  );
+test('a bad game requests block turns only that feature off, and says why', () => {
+  const logged = test.mock.method(console, 'error', () => {});
+  const config = parseConfig({ ...valid, gameRequests: { forumChannelId: '', maxOpenPerUser: '3' } });
+
+  assert.equal(config.gameRequests, undefined);
+  assert.equal(config.token, valid.token);
+
+  const message = String(logged.mock.calls[0]?.arguments[0]);
+  assert.match(message, /Game requests are OFF/);
+  assert.match(message, /gameRequests\.forumChannelId/);
+  assert.match(message, /gameRequests\.approverRoleId/);
+  assert.match(message, /gameRequests\.maxOpenPerUser/);
 });
 
 test('rejects a config that is not an object', () => {

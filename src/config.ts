@@ -88,15 +88,32 @@ export function parseConfig(raw: unknown): Config {
     problems.push('"serverInfo" must be an object');
   }
 
-  const gameRequests = parseGameRequests(value.gameRequests, problems);
-
   if (problems.length > 0) {
     throw new Error(`Invalid config.json:\n  - ${problems.join('\n  - ')}`);
+  }
+
+  // An optional feature with a bad config turns itself off; it must not take the bot down
+  const gameRequestProblems: string[] = [];
+  let gameRequests = parseGameRequests(value.gameRequests, gameRequestProblems);
+
+  if (gameRequestProblems.length > 0) {
+    console.error(`Game requests are OFF: invalid config.json:\n  - ${gameRequestProblems.join('\n  - ')}`);
+    gameRequests = undefined;
   }
 
   return { ...value, gameRequests } as unknown as Config;
 }
 
 export function loadConfig(path = join(dataDir, 'config.json')): Config {
-  return parseConfig(JSON.parse(readFileSync(path, 'utf8')));
+  const text = readFileSync(path, 'utf8');
+  let raw: unknown;
+
+  try {
+    raw = JSON.parse(text);
+  } catch (error) {
+    // Node's message carries the line and column, e.g. "Expected ',' or '}' ... (line 14 column 3)"
+    throw new Error(`config.json is not valid JSON: ${(error as Error).message}`);
+  }
+
+  return parseConfig(raw);
 }
