@@ -1,5 +1,7 @@
 import { SlashCommandBuilder } from 'discord.js';
+import { setTimeout as sleep } from 'node:timers/promises';
 import type { Config } from '../config.js';
+import { describeError, respond, serverFetch } from './server-api.js';
 import type { Command } from './types.js';
 
 // Can use serverOptions if this needs to be expanded to more games
@@ -7,9 +9,22 @@ const server = 'Minecraft';
 // Minecraft usernames: 3-16 letters, digits or underscores. The username is spliced into a
 // shell command on the game server, so anything outside this set must be rejected.
 const usernamePattern = /^[A-Za-z0-9_]{3,16}$/;
+// The log lines to search, and how long to give the server to write its answer first
+const logLinesToSearch = 20;
+const logWriteDelayMs = 1_000;
+
+/**
+ * The most recent answer to `whitelist list` in a chunk of the server log, e.g.
+ * "There are 2 whitelisted player(s): Alice, Bob" or "There are no whitelisted players"
+ */
+export function findWhitelistLine(log: string): string | null {
+  const lines = log.split('\n').filter(line => /whitelisted player/i.test(line));
+  // Drop the "[12:00:00] [Server thread/INFO]: " prefix
+  return lines.at(-1)?.replace(/^.*?\]:\s*/, '').trim() || null;
+}
 
 export function createServerWhitelist({ serverOptions, serverUrl }: Config): Command {
-  const exec = (command: string) => fetch(`${serverUrl}/${server}/exec`, {
+  const exec = (command: string) => serverFetch(`${serverUrl}/${server}/exec`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -86,15 +101,17 @@ export function createServerWhitelist({ serverOptions, serverUrl }: Config): Com
         }
 
         if (response === null) {
-          const resLog = await exec('tail -n 1 /serverdata/serverfiles/logs/latest.log');
+          // The answer goes to the server log, not the API response; give it a moment to land
+          await sleep(logWriteDelayMs);
+          const resLog = await exec(`tail -n ${logLinesToSearch} /serverdata/serverfiles/logs/latest.log`);
           const { result } = await resLog.json() as { result?: string };
-          await interaction.followUp(result || 'The server returned no output');
+          await interaction.followUp(findWhitelistLine(result ?? '') ?? 'Couldn\'t find the whitelist in the server log, try again in a moment');
         } else {
           await interaction.followUp(`Successfully ${response} whitelist`);
         }
       } catch (error) {
-        await interaction.followUp(`There was an error sending the whitelist command (${command}) to the ${server} server: ${error}`);
-        console.log(error);
+        await respond(interaction, `There was an error sending the whitelist command (${command}) to the ${server} server: ${describeError(error)}`);
+        console.error(error);
       }
     },
   };

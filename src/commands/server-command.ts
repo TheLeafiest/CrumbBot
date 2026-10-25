@@ -1,5 +1,6 @@
 import { SlashCommandBuilder } from 'discord.js';
 import type { Config } from '../config.js';
+import { describeError, respond, serverFetch } from './server-api.js';
 import type { Command } from './types.js';
 
 // Progress text shown while running, and the past tense used on success (null: no success message)
@@ -55,7 +56,7 @@ export function createServerCommand({ serverOptions, serverUrl, serverInfo }: Co
         }
 
         const url = command === 'status' ? `${serverUrl}/${server}` : `${serverUrl}/${server}/${command}`;
-        const res = await fetch(url);
+        const res = await serverFetch(url);
 
         if (res.status !== 200) {
           throw new Error(`Server responded with status code ${res.status}`);
@@ -68,8 +69,8 @@ export function createServerCommand({ serverOptions, serverUrl, serverInfo }: Co
           await interaction.followUp(`Successfully ${response} the ${server} server`);
         }
       } catch (error) {
-        await interaction.followUp(`There was an error while starting the ${server} server: ${error}`);
-        console.log(error);
+        await respond(interaction, `There was an error running ${command} on the ${server} server: ${describeError(error)}`);
+        console.error(error);
       }
     },
   };
