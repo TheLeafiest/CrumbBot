@@ -14,6 +14,43 @@ export interface Config {
   serverOptions: string[];
   serverUrl: string;
   serverInfo: Record<string, unknown>;
+  // Ideas and bug reports for gameTest; the feature is off when this block is absent
+  gameRequests?: GameRequestsConfig;
+}
+
+export interface GameRequestsConfig {
+  forumChannelId: string;
+  // Members with this role can approve, decline, and close requests
+  approverRoleId: string;
+  // Open (New or Approved) submissions allowed per member at once
+  maxOpenPerUser: number;
+}
+
+const defaultMaxOpenPerUser = 3;
+
+function parseGameRequests(raw: unknown, problems: string[]): GameRequestsConfig | undefined {
+  if (raw === undefined) {
+    return undefined;
+  }
+
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+    problems.push('"gameRequests" must be an object');
+    return undefined;
+  }
+
+  const { forumChannelId, approverRoleId, maxOpenPerUser = defaultMaxOpenPerUser } = raw as Record<string, unknown>;
+
+  for (const [key, value] of Object.entries({ forumChannelId, approverRoleId })) {
+    if (typeof value !== 'string' || value === '') {
+      problems.push(`"gameRequests.${key}" must be a non-empty string`);
+    }
+  }
+
+  if (typeof maxOpenPerUser !== 'number' || !Number.isInteger(maxOpenPerUser) || maxOpenPerUser < 1) {
+    problems.push('"gameRequests.maxOpenPerUser" must be a whole number of at least 1');
+  }
+
+  return { forumChannelId, approverRoleId, maxOpenPerUser } as GameRequestsConfig;
 }
 
 const requiredStrings = [
@@ -51,11 +88,13 @@ export function parseConfig(raw: unknown): Config {
     problems.push('"serverInfo" must be an object');
   }
 
+  const gameRequests = parseGameRequests(value.gameRequests, problems);
+
   if (problems.length > 0) {
     throw new Error(`Invalid config.json:\n  - ${problems.join('\n  - ')}`);
   }
 
-  return value as unknown as Config;
+  return { ...value, gameRequests } as unknown as Config;
 }
 
 export function loadConfig(path = join(dataDir, 'config.json')): Config {

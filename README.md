@@ -34,7 +34,36 @@ npm start
 | `serverUrl` | string | Base URL of the game-server control API |
 | `serverInfo` | object | Per-server details shown by `/server-command info` |
 
+| `gameRequests` | object, optional | Ideas and bug reports forum (below). Leave out to turn the feature off |
+
 The bot checks these at startup and lists every missing or invalid key.
+
+### Game ideas and bug reports
+
+Friends submit ideas and bug reports for the game to a Discord forum channel, and approvers
+triage them. To set it up:
+
+1. Create a **forum** channel (for example `#game-ideas`) with these tags, spelled exactly:
+   `Idea`, `Bug`, `New`, `Approved`, `Declined`, `Duplicate`, `Shipped`.
+2. Create an approver role (for example `Game Dev`) with **no permissions**, and give it to
+   everyone who should approve. The bot only checks that the role is there.
+3. In the forum, allow the bot: View Channel, Send Messages (Create Posts), Send Messages in
+   Threads, Manage Threads, Add Reactions, Read Message History and Embed Links.
+4. Add to `config.json` (Developer Mode → right-click → Copy ID):
+
+   ```json
+   "gameRequests": {
+     "forumChannelId": "<forum channel id>",
+     "approverRoleId": "<approver role id>",
+     "maxOpenPerUser": 3
+   }
+   ```
+
+   `maxOpenPerUser` is optional and defaults to 3.
+
+On startup the log shows `Game requests: ready in #game-ideas`, or `Game requests are OFF`
+followed by every problem it found (wrong channel, missing tags, missing permissions or an
+unknown role).
 
 ## Deploying
 

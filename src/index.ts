@@ -6,6 +6,7 @@ import { postChipCheck } from './chip-check.js';
 import { createCommands } from './commands/index.js';
 import { dataDir, loadConfig } from './config.js';
 import { handleCrumbMe } from './crumb-me.js';
+import { loadGameRequestsForum } from './game-requests/forum.js';
 
 // Backstop for anything the handlers below miss: Node exits on an unhandled rejection by
 // default, which would take the whole bot offline over one failed message
@@ -44,6 +45,13 @@ client.once(Events.ClientReady, readyClient => {
 
   // Schedule birthday message jobs
   startBirthdays(generalChannel);
+
+  if (config.gameRequests) {
+    // Logs whether the forum, its tags and the bot's permissions are set up correctly
+    loadGameRequestsForum(readyClient, config.gameRequests).catch(error => {
+      console.error('Game requests are OFF: failed to load the forum:', error);
+    });
+  }
 });
 
 // Handle sending an image for message that contains 'CRUMB ME'
