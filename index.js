@@ -1,4 +1,4 @@
-import { Client, Collection, Events, GatewayIntentBits } from 'discord.js';
+import { Client, Collection, Events, GatewayIntentBits, MessageFlags } from 'discord.js';
 import { readdirSync, existsSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { scheduledJobs, scheduleJob } from 'node-schedule';
@@ -191,9 +191,9 @@ const start = async () => {
     } catch (error) {
       console.error(error);
       if (interaction.replied || interaction.deferred) {
-        await interaction.followUp({ content: 'There was an error while executing this command!', ephemeral: true });
+        await interaction.followUp({ content: 'There was an error while executing this command!', flags: MessageFlags.Ephemeral });
       } else {
-        await interaction.reply({ content: 'There was an error while executing this command!', ephemeral: true });
+        await interaction.reply({ content: 'There was an error while executing this command!', flags: MessageFlags.Ephemeral });
       }
     }
   });
