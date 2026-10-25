@@ -87,7 +87,9 @@ async function startedRequests(existing: FakeThread[], options?: { failCreate?: 
   test.mock.method(console, 'log', () => {});
   const { client, created } = fakeForum(existing, options);
   const requests = createGameRequests({ forumChannelId: 'forum', approverRoleId: 'approver', maxOpenPerUser: 3 });
-  await requests.start(client);
+  // No vote channel: tests must not schedule the real Friday job
+  test.mock.method(console, 'error', () => {});
+  await requests.start(client, null);
 
   return { requests, created };
 }

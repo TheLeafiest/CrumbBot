@@ -54,7 +54,7 @@ client.once(Events.ClientReady, readyClient => {
   startBirthdays(generalChannel);
 
   // Logs whether the forum, its tags and the bot's permissions are set up correctly
-  gameRequests?.start(readyClient).catch(error => {
+  gameRequests?.start(readyClient, generalChannel).catch(error => {
     console.error('Game requests are OFF: failed to load the forum:', error);
   });
 });

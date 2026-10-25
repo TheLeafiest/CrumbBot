@@ -81,6 +81,17 @@ them, but only members with the approver role can use them:
 A decision swaps the status tag and posts the outcome in the thread, pinging the submitter.
 Declined, Duplicate and Shipped posts are locked and archived; Reopen undoes that.
 
+**Weekly vote.** Every Friday at 10:00 (container timezone) the bot:
+
+1. Declines New ideas that are 4 weeks old with no 👍 (the bot's own doesn't count), with a
+   friendly note. An approver can Reopen them. Bug reports are never closed this way.
+2. Posts a 24 hour, multiple-choice poll of the 5 most-voted New ideas in the general
+   channel (`generalChannelId`), then a list linking each one. Ties go to the idea that has
+   waited longest. With fewer than two New ideas there is no poll that week.
+
+The bot needs **Create Polls** in the general channel; without it the log shows
+`Weekly vote is OFF`.
+
 ### Chip Check
 
 A scheduled post that members answer by reacting, originally the Crumb Crew's Monday,

@@ -1,5 +1,6 @@
 import {
   ActionRowBuilder,
+  PermissionFlagsBits,
   ButtonBuilder,
   ButtonStyle,
   LabelBuilder,
@@ -12,7 +13,9 @@ import {
   type ButtonInteraction,
   type Client,
   type ModalSubmitInteraction,
+  type SendableChannels,
 } from 'discord.js';
+import { scheduleJob } from 'node-schedule';
 import type { Command } from '../commands/types.js';
 import type { GameRequestsConfig } from '../config.js';
 import { loadGameRequestsForum, statusTags, type GameRequestsForum, type TagName } from './forum.js';
@@ -31,6 +34,7 @@ import {
   triageRow,
   type TriageAction,
 } from './triage.js';
+import { buildPoll, candidateList, isStale, rankCandidates, staleReason, weeklyVoteSchedule, type Candidate } from './weekly.js';
 
 const modalPrefix = 'gr:submit:';
 const voteEmoji = '👍';
@@ -38,8 +42,11 @@ const unavailableMessage = 'Game ideas and bug reports are unavailable right now
 
 export interface GameRequests {
   commands: Command[];
-  // Find and verify the forum; until this succeeds the commands reply that they're unavailable
-  start(client: Client<true>): Promise<void>;
+  // Find and verify the forum (until this succeeds the commands reply that they're unavailable),
+  // and schedule the weekly vote in voteChannel
+  start(client: Client<true>, voteChannel: SendableChannels | null): Promise<void>;
+  // The Friday vote: close stale ideas, then poll the top New ideas. Runs on a schedule
+  runWeeklyVote(voteChannel: SendableChannels): Promise<void>;
   // Handle a form submission if it belongs to this feature; false if it doesn't
   handleModalSubmit(interaction: ModalSubmitInteraction): Promise<boolean>;
   // Handle a triage button click if it belongs to this feature; false if it doesn't
@@ -116,19 +123,114 @@ function tagId({ tagIds }: GameRequestsForum, name: TagName): string {
 }
 
 /**
- * How many of a member's posts are still New or Approved. Posts auto-archive when quiet, so
- * archived posts count too
+ * Every post in the forum. Quiet posts auto-archive, so archived posts (the latest 100) are
+ * included
  */
-async function countOpenSubmissions(loaded: GameRequestsForum, userId: string): Promise<number> {
-  const { forum } = loaded;
-  const openTagIds = new Set(openStatusTags.map(name => tagId(loaded, name)));
+async function listPosts({ forum }: GameRequestsForum): Promise<AnyThreadChannel[]> {
   const [active, archived] = await Promise.all([
     forum.threads.fetchActive(),
     forum.threads.fetchArchived({ type: 'public', limit: 100 }),
   ]);
 
-  const openThreads = [...active.threads.values(), ...archived.threads.values()]
-    .filter(thread => thread.parentId === forum.id && thread.appliedTags.some(id => openTagIds.has(id)));
+  return [...active.threads.values(), ...archived.threads.values()].filter(thread => thread.parentId === forum.id);
+}
+
+/**
+ * Apply a decision: swap the status tag, tell the submitter in the thread, update the
+ * buttons, and lock and archive decided posts
+ */
+async function applyDecision(
+  loaded: GameRequestsForum,
+  thread: AnyThreadChannel,
+  action: TriageAction,
+  actorName: string,
+  details: { reason?: string; originalThreadId?: string } = {},
+): Promise<void> {
+  const { to, closes } = triageActions[action];
+  const starter = await thread.fetchStarterMessage().catch(() => null);
+  const submitterId = starter ? parseSubmitterId(starter.content) : null;
+  const { type } = readTags(thread.appliedTags, loaded.tagIds);
+
+  // Archived or locked posts can't be changed, so open them first and close them again last
+  if (thread.archived) {
+    await thread.setArchived(false);
+  }
+
+  if (thread.locked && !closes) {
+    await thread.setLocked(false);
+  }
+
+  await thread.setAppliedTags(nextTags(thread.appliedTags, loaded.tagIds, to));
+  await thread.send({
+    content: outcomeMessage(action, { submitterId, type, approverName: actorName, ...details }),
+    // Ping the submitter only
+    allowedMentions: { users: submitterId ? [submitterId] : [] },
+  });
+
+  // Posts made by hand have no bot-owned starter message to put buttons on
+  if (starter?.editable) {
+    await starter.edit({ components: [triageRow(to)] });
+  }
+
+  if (closes) {
+    await thread.setLocked(true);
+    await thread.setArchived(true);
+  }
+}
+
+/**
+ * Close New ideas nobody voted for in a while, then post a poll of the most-voted New ideas
+ * (bug reports are fixed, not voted on). Skips the poll with fewer than two candidates
+ */
+async function runWeeklyVote(loaded: GameRequestsForum, voteChannel: SendableChannels, now = new Date()): Promise<void> {
+  const botName = loaded.forum.client.user.displayName;
+  const newIdeas = (await listPosts(loaded)).filter(thread => {
+    const { status, type } = readTags(thread.appliedTags, loaded.tagIds);
+    return status === statusTags.new && type === 'idea';
+  });
+
+  const candidates: Candidate[] = [];
+
+  for (const thread of newIdeas) {
+    const starter = await thread.fetchStarterMessage().catch(() => null);
+    const reaction = starter?.reactions.cache.get(voteEmoji);
+    const candidate: Candidate = {
+      title: thread.name,
+      url: thread.url,
+      // The bot's own 👍 is only there to make voting one click
+      votes: Math.max(0, (reaction?.count ?? 0) - (reaction?.me ? 1 : 0)),
+      createdAt: thread.createdAt ?? now,
+    };
+
+    if (isStale(candidate, now)) {
+      await applyDecision(loaded, thread, 'decline', botName, { reason: staleReason })
+        .then(() => console.log(`Weekly vote: closed "${thread.name}" (no votes in a while)`))
+        .catch(error => console.error(`Weekly vote: failed to close stale post ${thread.id}:`, error));
+      continue;
+    }
+
+    candidates.push(candidate);
+  }
+
+  const top = rankCandidates(candidates);
+
+  if (top.length < 2) {
+    console.log(`Weekly vote: skipped, ${top.length} New idea(s) is too few for a poll`);
+    return;
+  }
+
+  await voteChannel.send({ poll: buildPoll(top) });
+  await voteChannel.send({ content: candidateList(top), allowedMentions: { parse: [] } });
+  console.log(`Weekly vote: polled ${top.length} ideas`);
+}
+
+/**
+ * How many of a member's posts are still New or Approved. Posts auto-archive when quiet, so
+ * archived posts count too
+ */
+async function countOpenSubmissions(loaded: GameRequestsForum, userId: string): Promise<number> {
+  const openTagIds = new Set(openStatusTags.map(name => tagId(loaded, name)));
+  const openThreads = (await listPosts(loaded)).filter(thread => thread.appliedTags.some(id => openTagIds.has(id)));
 
   let count = 0;
 
@@ -255,8 +357,8 @@ export function createGameRequests(config: GameRequestsConfig): GameRequests {
   }
 
   /**
-   * Apply a decision: swap the status tag, tell the submitter in the thread, update the
-   * buttons, and lock and archive decided posts. The interaction must already be deferred
+   * Apply a decision for an approver and tell them how it went. The interaction must already
+   * be deferred
    */
   async function decide(
     interaction: TriageInteraction,
@@ -268,39 +370,10 @@ export function createGameRequests(config: GameRequestsConfig): GameRequests {
       return;
     }
 
-    const { to, closes } = triageActions[action];
+    const { to } = triageActions[action];
 
     try {
-      const starter = await thread.fetchStarterMessage().catch(() => null);
-      const submitterId = starter ? parseSubmitterId(starter.content) : null;
-      const { type } = readTags(thread.appliedTags, loaded.tagIds);
-
-      // Archived or locked posts can't be changed, so open them first and close them again last
-      if (thread.archived) {
-        await thread.setArchived(false);
-      }
-
-      if (thread.locked && !closes) {
-        await thread.setLocked(false);
-      }
-
-      await thread.setAppliedTags(nextTags(thread.appliedTags, loaded.tagIds, to));
-      await thread.send({
-        content: outcomeMessage(action, { submitterId, type, approverName: interaction.user.displayName, ...details }),
-        // Ping the submitter only
-        allowedMentions: { users: submitterId ? [submitterId] : [] },
-      });
-
-      // Posts made by hand have no bot-owned starter message to put buttons on
-      if (starter?.editable) {
-        await starter.edit({ components: [triageRow(to)] });
-      }
-
-      if (closes) {
-        await thread.setLocked(true);
-        await thread.setArchived(true);
-      }
-
+      await applyDecision(loaded, thread, action, interaction.user.displayName, details);
       await interaction.editReply(`Done: this post is now **${to}**.`);
     } catch (error) {
       console.error(`Failed to mark game request ${thread.id} as ${to}:`, error);
@@ -314,8 +387,38 @@ export function createGameRequests(config: GameRequestsConfig): GameRequests {
       command('bug', 'Report a bug in the game'),
     ],
 
-    async start(client) {
+    async start(client, voteChannel) {
       loaded = await loadGameRequestsForum(client, config);
+      const forum = loaded;
+
+      if (!forum) {
+        return;
+      }
+
+      if (!voteChannel) {
+        console.error('Weekly vote is OFF: the bot can\'t post in the general channel (check generalChannelId)');
+        return;
+      }
+
+      // Named as Discord's channel settings show them
+      const permissions = 'permissionsFor' in voteChannel ? voteChannel.permissionsFor(client.user) : null;
+
+      if (permissions && !permissions.has([PermissionFlagsBits.SendMessages, PermissionFlagsBits.SendPolls])) {
+        console.error(`Weekly vote is OFF: the bot needs Send Messages and Create Polls in #${'name' in voteChannel ? voteChannel.name : 'general'}`);
+        return;
+      }
+
+      // Never rejects: a rejection from a scheduled job would be unhandled
+      scheduleJob('weekly-vote', weeklyVoteSchedule, () => runWeeklyVote(forum, voteChannel).catch(error => {
+        console.error('Weekly vote failed:', error);
+      }));
+      console.log('Weekly vote: Fridays at 10:00');
+    },
+
+    async runWeeklyVote(voteChannel) {
+      if (loaded) {
+        await runWeeklyVote(loaded, voteChannel);
+      }
     },
 
     async handleModalSubmit(interaction) {
