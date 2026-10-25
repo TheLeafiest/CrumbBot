@@ -1,10 +1,12 @@
 import { REST, Routes } from 'discord.js';
 import { createCommands } from './commands/index.js';
 import { loadConfig } from './config.js';
+import { createGameRequests } from './game-requests/index.js';
 
 const config = loadConfig();
 const { token, clientId, guildId } = config;
-const body = createCommands(config).map(command => command.data.toJSON());
+const gameRequests = config.gameRequests ? createGameRequests(config.gameRequests) : null;
+const body = createCommands(config, gameRequests).map(command => command.data.toJSON());
 
 // Construct and prepare an instance of the REST module
 const rest = new REST().setToken(token);

@@ -1,12 +1,12 @@
 import { join } from 'node:path';
-import { Client, Events, GatewayIntentBits, MessageFlags, type Channel } from 'discord.js';
+import { Client, Events, GatewayIntentBits, MessageFlags, type Channel, type RepliableInteraction } from 'discord.js';
 import { scheduleJob } from 'node-schedule';
 import { startBirthdays } from './birthdays.js';
 import { postChipCheck } from './chip-check.js';
 import { createCommands } from './commands/index.js';
 import { dataDir, loadConfig } from './config.js';
 import { handleCrumbMe } from './crumb-me.js';
-import { loadGameRequestsForum } from './game-requests/forum.js';
+import { createGameRequests } from './game-requests/index.js';
 
 // Backstop for anything the handlers below miss: Node exits on an unhandled rejection by
 // default, which would take the whole bot offline over one failed message
@@ -15,7 +15,8 @@ process.on('unhandledRejection', error => {
 });
 
 const config = loadConfig();
-const commands = new Map(createCommands(config).map(command => [command.data.name, command]));
+const gameRequests = config.gameRequests ? createGameRequests(config.gameRequests) : null;
+const commands = new Map(createCommands(config, gameRequests).map(command => [command.data.name, command]));
 const imagesDir = join(dataDir, 'images');
 
 const sendable = (channel: Channel | undefined) => (channel?.isSendable() ? channel : null);
@@ -46,44 +47,56 @@ client.once(Events.ClientReady, readyClient => {
   // Schedule birthday message jobs
   startBirthdays(generalChannel);
 
-  if (config.gameRequests) {
-    // Logs whether the forum, its tags and the bot's permissions are set up correctly
-    loadGameRequestsForum(readyClient, config.gameRequests).catch(error => {
-      console.error('Game requests are OFF: failed to load the forum:', error);
-    });
-  }
+  // Logs whether the forum, its tags and the bot's permissions are set up correctly
+  gameRequests?.start(readyClient).catch(error => {
+    console.error('Game requests are OFF: failed to load the forum:', error);
+  });
 });
 
 // Handle sending an image for message that contains 'CRUMB ME'
 client.on(Events.MessageCreate, msg => handleCrumbMe(msg, imagesDir));
 
-// Handle slash commands
-client.on(Events.InteractionCreate, async interaction => {
-  if (!interaction.isChatInputCommand()) return;
-
-  const command = commands.get(interaction.commandName);
-
-  if (!command) {
-    console.error(`No command matching ${interaction.commandName} was found.`);
-    return;
-  }
+/**
+ * Tell the member something went wrong, without letting a failed reply escape
+ */
+async function reportInteractionError(interaction: RepliableInteraction): Promise<void> {
+  const content = 'There was an error while executing this command!';
 
   try {
+    if (interaction.replied || interaction.deferred) {
+      await interaction.followUp({ content, flags: MessageFlags.Ephemeral });
+    } else {
+      await interaction.reply({ content, flags: MessageFlags.Ephemeral });
+    }
+  } catch (replyError) {
+    console.error('Failed to report the command error:', replyError);
+  }
+}
+
+// Handle slash commands and form submissions
+client.on(Events.InteractionCreate, async interaction => {
+  if (!interaction.isChatInputCommand() && !interaction.isModalSubmit()) return;
+
+  try {
+    if (interaction.isModalSubmit()) {
+      if (!await gameRequests?.handleModalSubmit(interaction)) {
+        console.error(`No handler for form ${interaction.customId}.`);
+      }
+
+      return;
+    }
+
+    const command = commands.get(interaction.commandName);
+
+    if (!command) {
+      console.error(`No command matching ${interaction.commandName} was found.`);
+      return;
+    }
+
     await command.execute(interaction);
   } catch (error) {
     console.error(error);
-
-    const content = 'There was an error while executing this command!';
-
-    try {
-      if (interaction.replied || interaction.deferred) {
-        await interaction.followUp({ content, flags: MessageFlags.Ephemeral });
-      } else {
-        await interaction.reply({ content, flags: MessageFlags.Ephemeral });
-      }
-    } catch (replyError) {
-      console.error('Failed to report the command error:', replyError);
-    }
+    await reportInteractionError(interaction);
   }
 });
 
