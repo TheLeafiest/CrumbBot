@@ -6,6 +6,9 @@ const __dirname = resolve();
 const { serverOptions, serverUrl } = JSON.parse(readFileSync(join(__dirname, 'config.json')));
 // Can use serverOptions if this needs to be expanded to more games
 const server = 'Minecraft';
+// Minecraft usernames: 3-16 letters, digits or underscores. The username is spliced into a
+// shell command on the game server, so anything outside this set must be rejected.
+const usernamePattern = /^[A-Za-z0-9_]{3,16}$/;
 
 export const data = new SlashCommandBuilder()
   .setName('server-whitelist')
@@ -65,6 +68,10 @@ export async function execute(interaction) {
     // Check if the username is required for the command
     if (command !== 'list' && !username) {
       throw new Error(`The 'username' field is required when the command is '${command}'.`);
+    }
+
+    if (command !== 'list' && !usernamePattern.test(username)) {
+      throw new Error(`'${username}' is not a valid Minecraft username (3-16 letters, numbers or underscores).`);
     }
 
     const commandString = command === 'list' ? `${command}` : `${command} ${username}`;

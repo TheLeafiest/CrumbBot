@@ -40,5 +40,7 @@ const rest = new REST().setToken(token);
 		console.log(`Successfully reloaded ${data.length} application (/) commands.`);
 	} catch (error) {
 		console.error(error);
+		// Exit non-zero so start.sh can report that the bot is running with stale commands
+		process.exitCode = 1;
 	}
 })();

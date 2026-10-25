@@ -1,0 +1,22 @@
+# Runtime data and secrets are bind-mounted on the host, never baked into the image
+config.json
+birthdays.json
+images/
+.env*
+
+node_modules
+.git
+.gitignore
+.dockerignore
+.vscode/
+README.md
+
+# AI agent / issue-tracker files
+.claude/
+.beads/
+.beads.gate.lock
+.agents/
+.cursor/
+.codex/
+AGENTS.md
+CLAUDE.md

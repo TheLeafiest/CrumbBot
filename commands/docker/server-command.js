@@ -51,6 +51,7 @@ export async function execute(interaction) {
       case 'info':
         commandResult.action = 'Getting info for';
         commandResult.response = null;
+        break;
       case 'status':
         commandResult.action = 'Checking status of';
         commandResult.response = null;
