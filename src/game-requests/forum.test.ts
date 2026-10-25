@@ -27,8 +27,8 @@ test('lists the tags that are missing', () => {
 });
 
 test('names the permissions the bot lacks', () => {
-  const lacking: bigint = requiredPermissions['Manage Threads'];
+  const lacking: bigint = requiredPermissions['Manage Posts'];
 
-  assert.deepEqual(missingPermissions(permission => permission !== lacking), ['Manage Threads']);
+  assert.deepEqual(missingPermissions(permission => permission !== lacking), ['Manage Posts']);
   assert.deepEqual(missingPermissions(() => true), []);
 });

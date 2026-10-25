@@ -19,12 +19,13 @@ export type TagName = (typeof typeTags)[keyof typeof typeTags] | (typeof statusT
 
 const requiredTags: TagName[] = [...Object.values(typeTags), ...Object.values(statusTags)];
 
-// What the bot needs in the forum: create posts, talk in their threads, react, and lock decided posts
+// What the bot needs in the forum: create posts, talk in them, react, and lock decided posts.
+// Named as Discord's forum channel settings show them, which differ from text channels
 export const requiredPermissions = {
   'View Channel': PermissionFlagsBits.ViewChannel,
-  'Send Messages (Create Posts)': PermissionFlagsBits.SendMessages,
-  'Send Messages in Threads': PermissionFlagsBits.SendMessagesInThreads,
-  'Manage Threads': PermissionFlagsBits.ManageThreads,
+  'Create Posts': PermissionFlagsBits.SendMessages,
+  'Send Messages in Posts': PermissionFlagsBits.SendMessagesInThreads,
+  'Manage Posts': PermissionFlagsBits.ManageThreads,
   'Add Reactions': PermissionFlagsBits.AddReactions,
   'Read Message History': PermissionFlagsBits.ReadMessageHistory,
   'Embed Links': PermissionFlagsBits.EmbedLinks,
