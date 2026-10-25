@@ -27,7 +27,7 @@ export const requiredPermissions = {
   'Send Messages in Posts': PermissionFlagsBits.SendMessagesInThreads,
   'Manage Posts': PermissionFlagsBits.ManageThreads,
   'Add Reactions': PermissionFlagsBits.AddReactions,
-  'Read Message History': PermissionFlagsBits.ReadMessageHistory,
+  'Read Post History': PermissionFlagsBits.ReadMessageHistory,
   'Embed Links': PermissionFlagsBits.EmbedLinks,
 } as const;
 

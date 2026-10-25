@@ -48,7 +48,7 @@ triage them. To set it up:
 2. Create an approver role (for example `Game Dev`) with **no permissions**, and give it to
    everyone who should approve. The bot only checks that the role is there.
 3. In the forum, allow the bot: View Channel, Create Posts, Send Messages in Posts,
-   Manage Posts, Add Reactions, Read Message History and Embed Links (the names Discord
+   Manage Posts, Add Reactions, Read Post History and Embed Links (the names Discord
    shows in a forum channel's permission settings).
 4. Add to `config.json` (Developer Mode → right-click → Copy ID):
 
