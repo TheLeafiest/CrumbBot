@@ -2,3 +2,13 @@ node_modules
 config.json
 birthdays.json
 images/
+
+# AI agent / issue-tracker files (kept locally, not part of this repo)
+.claude/
+.beads/
+.beads.gate.lock
+.agents/
+.cursor/
+.codex/
+AGENTS.md
+CLAUDE.md
