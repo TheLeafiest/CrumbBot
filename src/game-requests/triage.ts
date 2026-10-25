@@ -92,18 +92,22 @@ export function parseThreadReference(text: string): string | null {
     ?? null;
 }
 
-interface OutcomeDetails {
+export interface OutcomeDetails {
   submitterId: string | null;
   type: SubmissionType;
   approverName: string;
   reason?: string;
+  // A duplicate of another post, or of a task already on gameTest's to-do list
   originalThreadId?: string;
+  originalBeadId?: string;
+  // Replaces the "Decided by ..." line, e.g. for decisions made by the gameTest sync
+  byline?: string;
 }
 
 /**
  * The message posted in the thread when a decision is made, addressed to the submitter
  */
-export function outcomeMessage(action: TriageAction, { submitterId, type, approverName, reason, originalThreadId }: OutcomeDetails): string {
+export function outcomeMessage(action: TriageAction, { submitterId, type, approverName, reason, originalThreadId, originalBeadId, byline }: OutcomeDetails): string {
   const noun = type === 'bug' ? 'bug report' : 'idea';
   const to = submitterId ? `<@${submitterId}> ` : '';
 
@@ -112,10 +116,12 @@ export function outcomeMessage(action: TriageAction, { submitterId, type, approv
       ? `Your bug report was confirmed, and it's on the list to fix.`
       : `Your idea was approved, and it's on the list for the game!`,
     decline: `Your ${noun} wasn't picked up this time.${reason ? `\n> ${reason.replaceAll('\n', '\n> ')}` : ''}`,
-    duplicate: `This one is already covered in <#${originalThreadId}>, so this post is closed. Add your vote and thoughts there!`,
+    duplicate: originalThreadId
+      ? `This one is already covered in <#${originalThreadId}>, so this post is closed. Add your vote and thoughts there!`
+      : `This one is already on the game's to-do list${originalBeadId ? ` as \`${originalBeadId}\`` : ''}, so this post is closed.`,
     shipped: type === 'bug' ? 'This bug is fixed in the game! 🎉' : 'Your idea is in the game! 🎉',
     reopen: 'This post was reopened.',
   }[action];
 
-  return `${to}${body}\n-# ${action === 'reopen' ? 'Reopened' : 'Decided'} by ${approverName}`;
+  return `${to}${body}\n-# ${byline ?? `${action === 'reopen' ? 'Reopened' : 'Decided'} by ${approverName}`}`;
 }

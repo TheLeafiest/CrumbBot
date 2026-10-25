@@ -92,6 +92,56 @@ Declined, Duplicate and Shipped posts are locked and archived; Reopen undoes tha
 The bot needs **Create Polls** in the general channel; without it the log shows
 `Weekly vote is OFF`.
 
+### gameTest sync
+
+Approved ideas and bug reports become beads in gameTest's tracker, and posts follow those beads
+back. This runs on Kale's PC, where gameTest's database, repo and release manifest live; the
+bot on Unraid isn't involved. Conventions were agreed with gameTest's agent (brisk-anvil):
+
+- **Approved post, no bead yet:** creates a gameTest `feature` (P3) or `bug` (P2) labelled
+  `community` and `needs-triage`, linked to the post by its external ref, and notes the bead
+  id in the post.
+- **Bead closed with a commit** (close reason `(abc1234) ...` or `Fixed in abc1234`): once
+  that commit is in the released build (the `version` in the game's `client_update.json`), the
+  post is marked Shipped. Closed but unreleased beads wait for the next release.
+- **Bead closed as `duplicate of gameTest-xxx`:** the post is marked Duplicate.
+- **Post declined or marked duplicate after its bead was made:** the bead is closed.
+- **Anything else** (a bead closed without a commit, an unknown commit) is reported as
+  `NEEDS YOU` and left alone.
+
+The sync writes to gameTest as `crumbbot`. It only creates beads and closes community beads;
+it never edits or reopens anything else.
+
+**Setup** (once):
+
+```bash
+mkdir -p ~/.config/crumbbot
+cp deploy/sync.example.json ~/.config/crumbbot/sync.json
+chmod 600 ~/.config/crumbbot/sync.json    # it holds the bot token; the sync refuses looser
+# then fill in the token, forumChannelId and approverRoleId
+```
+
+Optional keys, with their defaults: `gameTestPath` (`~/projects/kale/gameTest`),
+`releaseManifest` (`/mnt/c/Users/khalt/Games/gameTest/updates/client_update.json`) and
+`bdPath` (`~/.local/bin/bd`).
+
+**Running it:**
+
+```bash
+npm run sync-gametest -- --dry-run   # show what it would do, change nothing
+npm run sync-gametest                # sync now
+```
+
+**Hourly, 10:00 to 22:00:**
+
+```bash
+cp deploy/systemd/crumbbot-sync.{service,timer} ~/.config/systemd/user/
+systemctl --user daemon-reload && systemctl --user enable --now crumbbot-sync.timer
+journalctl --user -u crumbbot-sync    # what each run did
+```
+
+A lock stops an hourly run and a manual one from overlapping.
+
 ### Chip Check
 
 A scheduled post that members answer by reacting, originally the Crumb Crew's Monday,

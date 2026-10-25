@@ -1,0 +1,21 @@
+[Unit]
+# crumbbot-sync.service — sync #game-ideas on Discord with gameTest's beads (crumbbot-0c0.5).
+#
+# A USER UNIT on Kale's PC, where gameTest's database, repo and release manifest live.
+# Install (see README, "gameTest sync"):
+#     cp deploy/systemd/crumbbot-sync.{service,timer} ~/.config/systemd/user/
+#     systemctl --user daemon-reload && systemctl --user enable --now crumbbot-sync.timer
+#
+# Runs `npm run sync-gametest`, which rebuilds first, so a `git pull` takes effect on the next
+# run. Output goes to the journal: journalctl --user -u crumbbot-sync
+Description=Sync #game-ideas with gameTest's beads
+After=dolt.service
+Wants=dolt.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/projects/kale/CrumbBot
+# systemd user units don't get ~/.local/bin on their PATH, and node, npm and bd live there
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=%h/.local/bin/npm run --silent sync-gametest
+TimeoutStartSec=300

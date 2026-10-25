@@ -1,0 +1,11 @@
+[Unit]
+Description=Hourly #game-ideas to gameTest sync, 10:00 to 22:00
+
+[Timer]
+# On the hour from 10:00 through 22:00, local time. Runs missed while the PC was off are
+# skipped, not caught up: the next hourly run covers them
+OnCalendar=*-*-* 10..22:00:00
+Persistent=false
+
+[Install]
+WantedBy=timers.target

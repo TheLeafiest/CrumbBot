@@ -1,0 +1,5 @@
+{
+  "token": "<the bot token, the same one as config.json on Unraid>",
+  "forumChannelId": "<#game-ideas channel id>",
+  "approverRoleId": "<approver role id>"
+}

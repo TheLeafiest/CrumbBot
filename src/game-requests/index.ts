@@ -19,6 +19,7 @@ import { scheduleJob } from 'node-schedule';
 import type { Command } from '../commands/types.js';
 import type { GameRequestsConfig } from '../config.js';
 import { loadGameRequestsForum, statusTags, type GameRequestsForum, type TagName } from './forum.js';
+import { applyDecision, listPosts, tagId, voteEmoji } from './actions.js';
 import { buildPostContent, echoSubmission, openStatusTags, parseSubmitterId, submissionForms, type SubmissionType } from './posts.js';
 import {
   actionsByStatus,
@@ -37,7 +38,6 @@ import {
 import { buildPoll, candidateList, isStale, rankCandidates, staleReason, weeklyVoteSchedule, type Candidate } from './weekly.js';
 
 const modalPrefix = 'gr:submit:';
-const voteEmoji = '👍';
 const unavailableMessage = 'Game ideas and bug reports are unavailable right now. Let Kale know!';
 
 export interface GameRequests {
@@ -109,73 +109,6 @@ function buildModal(type: SubmissionType): ModalBuilder {
         .setStyle(field.style)
         .setRequired(field.required)
         .setMaxLength(field.maxLength))));
-}
-
-function tagId({ tagIds }: GameRequestsForum, name: TagName): string {
-  const id = tagIds.get(name);
-
-  // loadGameRequestsForum only succeeds when every tag exists, so this means a bug
-  if (!id) {
-    throw new Error(`Forum tag "${name}" is missing`);
-  }
-
-  return id;
-}
-
-/**
- * Every post in the forum. Quiet posts auto-archive, so archived posts (the latest 100) are
- * included
- */
-async function listPosts({ forum }: GameRequestsForum): Promise<AnyThreadChannel[]> {
-  const [active, archived] = await Promise.all([
-    forum.threads.fetchActive(),
-    forum.threads.fetchArchived({ type: 'public', limit: 100 }),
-  ]);
-
-  return [...active.threads.values(), ...archived.threads.values()].filter(thread => thread.parentId === forum.id);
-}
-
-/**
- * Apply a decision: swap the status tag, tell the submitter in the thread, update the
- * buttons, and lock and archive decided posts
- */
-async function applyDecision(
-  loaded: GameRequestsForum,
-  thread: AnyThreadChannel,
-  action: TriageAction,
-  actorName: string,
-  details: { reason?: string; originalThreadId?: string } = {},
-): Promise<void> {
-  const { to, closes } = triageActions[action];
-  const starter = await thread.fetchStarterMessage().catch(() => null);
-  const submitterId = starter ? parseSubmitterId(starter.content) : null;
-  const { type } = readTags(thread.appliedTags, loaded.tagIds);
-
-  // Archived or locked posts can't be changed, so open them first and close them again last
-  if (thread.archived) {
-    await thread.setArchived(false);
-  }
-
-  if (thread.locked && !closes) {
-    await thread.setLocked(false);
-  }
-
-  await thread.setAppliedTags(nextTags(thread.appliedTags, loaded.tagIds, to));
-  await thread.send({
-    content: outcomeMessage(action, { submitterId, type, approverName: actorName, ...details }),
-    // Ping the submitter only
-    allowedMentions: { users: submitterId ? [submitterId] : [] },
-  });
-
-  // Posts made by hand have no bot-owned starter message to put buttons on
-  if (starter?.editable) {
-    await starter.edit({ components: [triageRow(to)] });
-  }
-
-  if (closes) {
-    await thread.setLocked(true);
-    await thread.setArchived(true);
-  }
 }
 
 /**
