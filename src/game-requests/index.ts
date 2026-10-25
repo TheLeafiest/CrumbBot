@@ -409,10 +409,11 @@ export function createGameRequests(config: GameRequestsConfig): GameRequests {
       }
 
       // Never rejects: a rejection from a scheduled job would be unhandled
-      scheduleJob('weekly-vote', weeklyVoteSchedule, () => runWeeklyVote(forum, voteChannel).catch(error => {
+      const job = scheduleJob('weekly-vote', weeklyVoteSchedule, () => runWeeklyVote(forum, voteChannel).catch(error => {
         console.error('Weekly vote failed:', error);
       }));
-      console.log('Weekly vote: Fridays at 10:00');
+      // The time includes its UTC offset, which shows whether the container's timezone is right
+      console.log(`Weekly vote: Fridays at 10:00, next ${job?.nextInvocation()?.toString() ?? 'unknown'}`);
     },
 
     async runWeeklyVote(voteChannel) {
