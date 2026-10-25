@@ -1,4 +1,7 @@
 import {
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
   LabelBuilder,
   MessageFlags,
   ModalBuilder,
@@ -140,7 +143,15 @@ export function createGameRequests(config: GameRequestsConfig): GameRequests {
         .then(starter => starter?.react(voteEmoji))
         .catch(error => console.error(`Failed to add the vote reaction to ${thread.id}:`, error));
 
-      await interaction.editReply(`Thanks! Your ${form.noun} is posted: ${thread.url}`);
+      // A bare post link can render as "unknown" until the member's client loads the new thread,
+      // so link to it with a button instead
+      await interaction.editReply({
+        content: `Thanks! Your ${form.noun} **${thread.name}** is posted in <#${loaded.forum.id}>.`,
+        components: [new ActionRowBuilder<ButtonBuilder>().addComponents(new ButtonBuilder()
+          .setStyle(ButtonStyle.Link)
+          .setLabel('Open your post')
+          .setURL(thread.url))],
+      });
     } catch (error) {
       console.error('Failed to post a game request:', error);
       await interaction.editReply(`Something went wrong posting your ${form.noun}. `

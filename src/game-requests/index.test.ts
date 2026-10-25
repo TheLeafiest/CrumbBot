@@ -39,6 +39,7 @@ function fakeForum(existing: FakeThread[], { failCreate = false } = {}) {
 
         return {
           id: 'new-thread',
+          name: options.name,
           url: 'https://discord.com/channels/1/new-thread',
           members: { add: async (id: string) => { post.members.push(id); } },
           fetchStarterMessage: async () => ({ react: async (emoji: string) => { post.reactions.push(emoji); } }),
@@ -53,16 +54,26 @@ function fakeForum(existing: FakeThread[], { failCreate = false } = {}) {
 
 function fakeSubmit(customId: string, values: Record<string, string>, userId = '111') {
   const replies: string[] = [];
+  const buttons: unknown[] = [];
   const interaction = {
     customId,
     user: { id: userId },
     fields: { getTextInputValue: (id: string) => values[id] ?? '' },
     reply: async ({ content }: { content: string }) => { replies.push(content); },
     deferReply: async () => {},
-    editReply: async (content: string) => { replies.push(content); },
+    editReply: async (reply: string | { content: string; components?: { toJSON(): { components: unknown[] } }[] }) => {
+      if (typeof reply === 'string') {
+        replies.push(reply);
+        return;
+      }
+
+      replies.push(reply.content);
+      // Round-trip through JSON to drop fields the builder leaves undefined
+      buttons.push(...JSON.parse(JSON.stringify((reply.components ?? []).flatMap(row => row.toJSON().components))));
+    },
   } as unknown as ModalSubmitInteraction;
 
-  return { interaction, replies };
+  return { interaction, replies, buttons };
 }
 
 const openPost = (id: string, userId: string, status = 'New'): FakeThread => ({
@@ -83,7 +94,7 @@ async function startedRequests(existing: FakeThread[], options?: { failCreate?: 
 
 test('posts an idea tagged Idea + New, adds the submitter and a vote, and links it', async () => {
   const { requests, created } = await startedRequests([]);
-  const { interaction, replies } = fakeSubmit('gr:submit:idea', { title: '  Grenades ', idea: 'Add grenades' });
+  const { interaction, replies, buttons } = fakeSubmit('gr:submit:idea', { title: '  Grenades ', idea: 'Add grenades' });
 
   assert.equal(await requests.handleModalSubmit(interaction), true);
   assert.deepEqual(created, [{
@@ -93,7 +104,8 @@ test('posts an idea tagged Idea + New, adds the submitter and a vote, and links 
     members: ['111'],
     reactions: ['👍'],
   }]);
-  assert.deepEqual(replies, ['Thanks! Your idea is posted: https://discord.com/channels/1/new-thread']);
+  assert.deepEqual(replies, ['Thanks! Your idea **Grenades** is posted in <#forum>.']);
+  assert.deepEqual(buttons, [{ type: 2, style: 5, label: 'Open your post', url: 'https://discord.com/channels/1/new-thread' }]);
 });
 
 test('bug reports get the Bug tag', async () => {
