@@ -20,11 +20,11 @@ export const removeBirthday: Command = {
       writeBirthdays(data);
     } catch (error) {
       console.error(error);
-      await interaction.reply(`There was an error while removing the birthday for ${user.globalName}: ${error}`);
+      await interaction.reply(`There was an error while removing the birthday for ${user.displayName}: ${error}`);
       return;
     }
 
     cancelBirthday(user.id);
-    await interaction.reply(`Birthday removed for ${user.globalName}.`);
+    await interaction.reply(`Birthday removed for ${user.displayName}.`);
   },
 };
