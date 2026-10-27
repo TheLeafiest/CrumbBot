@@ -89,9 +89,9 @@ Declined, Duplicate and Shipped posts are locked and archived; Reopen undoes tha
    channel (`generalChannelId`), then a list linking each one. Ties go to the idea that has
    waited longest.
 3. With fewer than two New ideas, polls the approved ideas that haven't shipped yet instead
-   ("Which approved idea should be built next?"), with a nudge to suggest ideas with `/idea`.
-   With fewer than two of those as well, there is no poll that week. Approved ideas are never
-   closed for lack of votes.
+   ("Which approved idea should be built next?"). With fewer than two of those as well, there
+   is no poll; it posts a short nudge to suggest ideas with `/idea` instead. Approved ideas are
+   never closed for lack of votes.
 
 The bot needs **Create Polls** in the general channel; without it the log shows
 `Weekly vote is OFF`.

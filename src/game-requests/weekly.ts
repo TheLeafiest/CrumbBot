@@ -24,6 +24,9 @@ const pollQuestions: Record<PollKind, string> = {
   'build-next': 'Which approved idea should be built next?',
 };
 
+// Posted instead of a poll when there are too few ideas of either kind
+export const noVoteNudge = 'Not enough ideas for a vote this week. Got one? Suggest it with /idea';
+
 export interface Candidate {
   title: string;
   url: string;
@@ -76,7 +79,6 @@ export function candidateList(candidates: readonly Candidate[], kind: PollKind =
     return [
       `Not enough new ideas for a vote this week, so here are approved ideas still waiting to be built. Which should come next? Vote above! The poll closes in ${pollHours} hours.`,
       ...lines,
-      '-# Got an idea of your own? Suggest it with /idea',
     ].join('\n');
   }
 

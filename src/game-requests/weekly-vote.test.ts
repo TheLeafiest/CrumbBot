@@ -92,7 +92,7 @@ test('closes ideas with no votes after 4 weeks, but never bug reports', async ()
   assert.deepEqual(liked.state.appliedTags, [tagId('Idea'), tagId('New')]);
 });
 
-test('with fewer than two New ideas, polls the approved ideas that haven\'t shipped, with a nudge', async () => {
+test('with fewer than two New ideas, polls the approved ideas that haven\'t shipped', async () => {
   const sent = await runVote([
     fakePost('lonely', { votes: 5 }),
     fakePost('hammer', { status: 'Approved', votes: 1 }),
@@ -105,7 +105,8 @@ test('with fewer than two New ideas, polls the approved ideas that haven\'t ship
   assert.equal(poll.poll.question.text, 'Which approved idea should be built next?');
   assert.deepEqual(poll.poll.answers.map(answer => answer.text), ['1. cannons', '2. hammer']);
   assert.match(list.content, /^Not enough new ideas for a vote this week/);
-  assert.match(list.content, /Suggest it with \/idea$/);
+  assert.doesNotMatch(list.content, /\/idea/);
+  assert.equal(sent.length, 2);
 });
 
 test('approved ideas are never closed for lack of votes', async () => {
@@ -128,10 +129,10 @@ test('two New ideas still get the usual poll, even with approved ideas waiting',
   assert.deepEqual(poll.poll.answers.map(answer => answer.text.replace(/^\d+\. /, '')).sort(), ['grenades', 'hats']);
 });
 
-test('skips the week with fewer than two New and fewer than two unshipped approved ideas', async () => {
+test('with too few of both, posts only a nudge to suggest ideas', async () => {
   assert.deepEqual(await runVote([
     fakePost('lonely', { votes: 5 }),
     fakePost('hammer', { status: 'Approved' }),
     fakePost('shipped-towers', { status: 'Shipped' }),
-  ]), []);
+  ]), [{ content: 'Not enough ideas for a vote this week. Got one? Suggest it with /idea', allowedMentions: { parse: [] } }]);
 });

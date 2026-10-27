@@ -35,7 +35,17 @@ import {
   triageRow,
   type TriageAction,
 } from './triage.js';
-import { buildPoll, candidateList, isStale, rankCandidates, staleReason, weeklyVoteSchedule, type Candidate, type PollKind } from './weekly.js';
+import {
+  buildPoll,
+  candidateList,
+  isStale,
+  noVoteNudge,
+  rankCandidates,
+  staleReason,
+  weeklyVoteSchedule,
+  type Candidate,
+  type PollKind,
+} from './weekly.js';
 
 const modalPrefix = 'gr:submit:';
 const unavailableMessage = 'Game ideas and bug reports are unavailable right now. Let Kale know!';
@@ -114,7 +124,7 @@ function buildModal(type: SubmissionType): ModalBuilder {
 /**
  * Close New ideas nobody voted for in a while, then post a poll of the most-voted New ideas
  * (bug reports are fixed, not voted on). With fewer than two New ideas, poll the approved ideas
- * that haven't shipped instead; with fewer than two of those too, skip the week
+ * that haven't shipped instead; with fewer than two of those too, post a nudge to suggest ideas
  */
 async function runWeeklyVote(loaded: GameRequestsForum, voteChannel: SendableChannels, now = new Date()): Promise<void> {
   const botName = loaded.forum.client.user.displayName;
@@ -159,7 +169,8 @@ async function runWeeklyVote(loaded: GameRequestsForum, voteChannel: SendableCha
   const [kind, top]: [PollKind, Candidate[]] = newTop.length >= 2 ? ['new', newTop] : ['build-next', approvedTop];
 
   if (top.length < 2) {
-    console.log(`Weekly vote: skipped, ${newTop.length} New and ${approvedTop.length} approved idea(s) are too few for a poll`);
+    await voteChannel.send({ content: noVoteNudge, allowedMentions: { parse: [] } });
+    console.log(`Weekly vote: no poll, ${newTop.length} New and ${approvedTop.length} approved idea(s) are too few; posted a nudge instead`);
     return;
   }
 
