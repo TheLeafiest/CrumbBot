@@ -100,7 +100,8 @@ bot on Unraid isn't involved. Conventions were agreed with gameTest's agent (bri
 
 - **Approved post, no bead yet:** creates a gameTest `feature` (P3) or `bug` (P2) labelled
   `community` and `needs-triage`, linked to the post by its external ref, and notes the bead
-  id in the post.
+  id in the post. The bead description includes the post and every reply people wrote in its
+  thread up to then; later replies stay in Discord.
 - **Bead closed with a commit** (close reason `(abc1234) ...` or `Fixed in abc1234`): once
   that commit is in the released build (the `version` in the game's `client_update.json`), the
   post is marked Shipped. Closed but unreleased beads wait for the next release.
@@ -111,6 +112,15 @@ bot on Unraid isn't involved. Conventions were agreed with gameTest's agent (bri
 
 The sync writes to gameTest as `crumbbot`. It only creates beads and closes community beads;
 it never edits or reopens anything else.
+
+**Release notes:** each new entry in gameTest's `RELEASE_NOTES.md` (read from `main`) is
+posted once to the forum as its own post, tagged `Release`, with the heading as the title. An
+entry waits until the commit on its `Build:` line is in the released build. Posted headings
+are recorded in `~/.local/state/crumbbot/release-notes.json`; on the first run every entry
+except the newest is recorded as already posted, so old notes are never backfilled. Release
+posts have no status tag, so triage, the open-post cap and the weekly vote ignore them, and
+replies there aren't copied anywhere. Without a `Release` tag on the forum nothing is posted
+and the run says so.
 
 **Setup** (once):
 

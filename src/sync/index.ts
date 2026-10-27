@@ -8,6 +8,19 @@ import { readTags } from '../game-requests/triage.js';
 import { createBeads, type Beads } from './beads.js';
 import { loadSyncConfig } from './config.js';
 import { beadDescription, describeAction, planSync, replaceUserMentions, type PostInfo, type SyncAction, type ThreadReply } from './plan.js';
+import {
+  describeReleaseAction,
+  parseReleaseNotes,
+  planReleaseNotes,
+  readPosted,
+  readReleaseNotes,
+  releaseMessages,
+  releaseTagName,
+  releaseTitle,
+  seedPosted,
+  writePosted,
+  type ReleaseEntry,
+} from './release-notes.js';
 import { checkReleased, readReleaseSha } from './release.js';
 
 /*
@@ -131,6 +144,94 @@ async function execute(action: SyncAction, thread: AnyThreadChannel, loaded: Gam
   }
 }
 
+/**
+ * Post one release-notes entry as its own forum post, tagged Release. Replies are welcome there;
+ * the post carries no status tag, so triage, the open-post cap and the weekly vote ignore it
+ */
+async function postReleaseNotes(loaded: GameRequestsForum, releaseTagId: string, entry: ReleaseEntry): Promise<void> {
+  const [first, ...rest] = releaseMessages(entry);
+  const thread = await loaded.forum.threads.create({
+    name: releaseTitle(entry),
+    message: { content: first ?? entry.heading, allowedMentions: { parse: [] } },
+    appliedTags: [releaseTagId],
+  });
+
+  for (const content of rest) {
+    await thread.send({ content, allowedMentions: { parse: [] } });
+  }
+}
+
+/**
+ * Post gameTest's new release notes to the forum once their build is released. Returns the
+ * number of failures
+ */
+async function syncReleaseNotes(loaded: GameRequestsForum, threads: readonly AnyThreadChannel[], gameTestPath: string, releaseSha: string): Promise<number> {
+  const markdown = readReleaseNotes(gameTestPath);
+
+  if (markdown === null) {
+    console.log('Release notes: no RELEASE_NOTES.md on gameTest main');
+    return 0;
+  }
+
+  const entries = parseReleaseNotes(markdown);
+  const saved = readPosted();
+  const posted = saved ?? seedPosted(entries);
+  const actions = planReleaseNotes(entries, posted, sha => checkReleased(gameTestPath, sha, releaseSha));
+  const toPost = actions.filter(action => action.kind === 'post-release');
+
+  console.log(`Release notes: ${entries.length} entries; ${actions.length === 0 ? 'nothing to post' : `${actions.length} item(s):`}`);
+
+  for (const action of actions.filter(action => action.kind !== 'post-release')) {
+    console.log(`  ${describeReleaseAction(action)}`);
+  }
+
+  if (toPost.length === 0) {
+    return 0;
+  }
+
+  const releaseTag = loaded.forum.availableTags.find(tag => tag.name.trim().toLowerCase() === releaseTagName.toLowerCase());
+
+  if (!releaseTag) {
+    console.log(`  NEEDS YOU: add a "${releaseTagName}" tag to #${loaded.forum.name}; ${toPost.length} release note(s) are waiting for it`);
+    return 0;
+  }
+
+  if (dryRun) {
+    toPost.forEach(action => console.log(`  would ${describeReleaseAction(action)}`));
+    return 0;
+  }
+
+  // Record the first run's starting point before posting, so a failure can't cause a backfill later
+  if (!saved) {
+    writePosted(posted);
+  }
+
+  const botId = loaded.forum.client.user.id;
+  let failures = 0;
+
+  for (const { entry } of toPost) {
+    const line = describeReleaseAction({ kind: 'post-release', entry });
+
+    try {
+      // Already posted but not recorded (e.g. the state file was lost): record it, don't repost
+      const existing = threads.find(thread => thread.ownerId === botId && thread.name === releaseTitle(entry));
+
+      if (!existing) {
+        await postReleaseNotes(loaded, releaseTag.id, entry);
+      }
+
+      posted.add(entry.heading);
+      writePosted(posted);
+      console.log(`  ${existing ? 'already posted, recorded' : 'done'}: ${line}`);
+    } catch (error) {
+      failures++;
+      console.error(`  FAILED: ${line}:`, error);
+    }
+  }
+
+  return failures;
+}
+
 async function sync(): Promise<number> {
   const config = loadSyncConfig();
   const releaseSha = readReleaseSha(config.releaseManifest);
@@ -182,6 +283,8 @@ async function sync(): Promise<number> {
         console.error(`  FAILED: ${line}:`, error);
       }
     }
+
+    failures += await syncReleaseNotes(loaded, threads, config.gameTestPath, releaseSha);
 
     if (dryRun) {
       console.log('Dry run: nothing was changed.');
