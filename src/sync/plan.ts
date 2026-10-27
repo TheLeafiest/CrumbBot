@@ -103,12 +103,45 @@ export function describeAction(action: SyncAction): string {
   }
 }
 
-/**
- * The bead description for a post: where it came from, then the submitter's text without the
- * Discord mention (an id means nothing in gameTest)
- */
-export function beadDescription(postContent: string, url: string): string {
-  const body = postContent.replace(/^Submitted by <@!?\d+>\s*/, '').trim();
+// A reply someone wrote in a post's thread before the bead was made
+export interface ThreadReply {
+  authorName: string;
+  createdAt: Date;
+  // User mentions already turned into names (see replaceUserMentions)
+  content: string;
+  attachmentCount: number;
+  // Attachment links expire after about a day, so the bead links the message instead
+  messageUrl: string;
+}
 
-  return `From the #game-ideas forum on Discord: ${url}\n\n${body}`;
+/**
+ * Turn <@id> mentions into @names; an id means nothing in gameTest
+ */
+export function replaceUserMentions(content: string, nameOf: (id: string) => string | undefined): string {
+  return content.replace(/<@!?(\d+)>/g, (_mention, id: string) => `@${nameOf(id) ?? 'someone'}`);
+}
+
+// "2026-10-26 14:05 UTC": the sync runs in WSL, whose local time zone can't be relied on
+const formatTime = (date: Date) => `${date.toISOString().slice(0, 16).replace('T', ' ')} UTC`;
+
+function formatReply({ authorName, createdAt, content, attachmentCount, messageUrl }: ThreadReply): string {
+  const attachments = attachmentCount === 0
+    ? []
+    : [`(${attachmentCount} attachment${attachmentCount === 1 ? '' : 's'}: ${messageUrl})`];
+
+  return [`${authorName}, ${formatTime(createdAt)}:`, content.trim(), ...attachments].filter(Boolean).join('\n');
+}
+
+/**
+ * The bead description for a post: where it came from, the submitter's text without the
+ * Discord mention, then any discussion in the thread before the bead was made. Later replies
+ * aren't copied: the external ref links back to the thread
+ */
+export function beadDescription(postContent: string, url: string, replies: readonly ThreadReply[] = []): string {
+  const body = postContent.replace(/^Submitted by <@!?\d+>\s*/, '').trim();
+  const discussion = replies.length === 0
+    ? ''
+    : `\n\nDiscussion on Discord before approval:\n\n${replies.map(formatReply).join('\n\n')}`;
+
+  return `From the #game-ideas forum on Discord: ${url}\n\n${body}${discussion}`;
 }

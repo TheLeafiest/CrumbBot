@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import type { Bead } from './beads.js';
-import { beadDescription, describeAction, planSync, type PostInfo } from './plan.js';
+import { beadDescription, describeAction, planSync, replaceUserMentions, type PostInfo } from './plan.js';
 import { closeSha, duplicateOf, type ReleaseCheck } from './release.js';
 
 const post = (name: string, status: PostInfo['status'], type: PostInfo['type'] = 'idea'): PostInfo => ({
@@ -79,5 +79,45 @@ test('describes a bead with a link back and without the Discord mention', () => 
   assert.equal(
     beadDescription('Submitted by <@123>\n\n**Your idea**\nAdd hats', 'https://discord.com/channels/1/2'),
     'From the #game-ideas forum on Discord: https://discord.com/channels/1/2\n\n**Your idea**\nAdd hats',
+  );
+});
+
+test('adds the discussion before approval, oldest first, with attachments as a message link', () => {
+  const description = beadDescription('Submitted by <@123>\n\n**Your idea**\nAdd hats', 'https://discord.com/channels/1/2', [
+    {
+      authorName: 'Sam',
+      createdAt: new Date('2026-10-26T14:05:30Z'),
+      content: '  Love it, maybe top hats?  ',
+      attachmentCount: 0,
+      messageUrl: 'https://discord.com/channels/1/2/3',
+    },
+    {
+      authorName: 'Kale',
+      createdAt: new Date('2026-10-26T15:00:00Z'),
+      content: '',
+      attachmentCount: 2,
+      messageUrl: 'https://discord.com/channels/1/2/4',
+    },
+  ]);
+
+  assert.equal(description, [
+    'From the #game-ideas forum on Discord: https://discord.com/channels/1/2',
+    '',
+    '**Your idea**\nAdd hats',
+    '',
+    'Discussion on Discord before approval:',
+    '',
+    'Sam, 2026-10-26 14:05 UTC:\nLove it, maybe top hats?',
+    '',
+    'Kale, 2026-10-26 15:00 UTC:\n(2 attachments: https://discord.com/channels/1/2/4)',
+  ].join('\n'));
+});
+
+test('turns user mentions into names', () => {
+  const names = new Map([['42', 'Kale']]);
+
+  assert.equal(
+    replaceUserMentions('Ask <@42> or <@!42>, not <@99>', id => names.get(id)),
+    'Ask @Kale or @Kale, not @someone',
   );
 });

@@ -1,13 +1,13 @@
 import { closeSync, mkdirSync, openSync, rmSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { Client, Events, GatewayIntentBits, type AnyThreadChannel } from 'discord.js';
+import { Client, Events, GatewayIntentBits, type AnyThreadChannel, type Message } from 'discord.js';
 import { applyDecision, listPosts } from '../game-requests/actions.js';
 import { loadGameRequestsForum, type GameRequestsForum } from '../game-requests/forum.js';
 import { readTags } from '../game-requests/triage.js';
 import { createBeads, type Beads } from './beads.js';
 import { loadSyncConfig } from './config.js';
-import { beadDescription, describeAction, planSync, type PostInfo, type SyncAction } from './plan.js';
+import { beadDescription, describeAction, planSync, replaceUserMentions, type PostInfo, type SyncAction, type ThreadReply } from './plan.js';
 import { checkReleased, readReleaseSha } from './release.js';
 
 /*
@@ -44,6 +44,41 @@ function takeLock(): boolean {
   }
 }
 
+// Pages of 100 messages; a thread longer than this before approval would be unusual
+const maxReplyPages = 10;
+
+/**
+ * Every reply a person wrote in the thread, oldest first. The post itself, the bot's notes and
+ * system messages (pins, renames) are left out
+ */
+async function fetchReplies(thread: AnyThreadChannel): Promise<ThreadReply[]> {
+  const messages: Message[] = [];
+  let before: string | undefined;
+
+  for (let page = 0; page < maxReplyPages; page++) {
+    const batch = await thread.messages.fetch({ limit: 100, before });
+    messages.push(...batch.values());
+
+    if (batch.size < 100) {
+      break;
+    }
+
+    // Each page is newest first, so the last message is the oldest
+    before = batch.last()?.id;
+  }
+
+  return messages
+    .filter(message => message.id !== thread.id && !message.author.bot && !message.system)
+    .sort((a, b) => a.createdTimestamp - b.createdTimestamp)
+    .map(message => ({
+      authorName: message.author.displayName,
+      createdAt: message.createdAt,
+      content: replaceUserMentions(message.content, id => message.mentions.users.get(id)?.displayName),
+      attachmentCount: message.attachments.size,
+      messageUrl: message.url,
+    }));
+}
+
 /**
  * A quiet note in a post's thread. Approved posts auto-archive when idle, and Discord refuses
  * messages in archived threads
@@ -68,7 +103,7 @@ async function execute(action: SyncAction, thread: AnyThreadChannel, loaded: Gam
         // Agreed with brisk-anvil: bugs P2, ideas P3
         priority: isBug ? 2 : 3,
         title: action.post.title,
-        description: beadDescription(starter?.content ?? '', action.post.url),
+        description: beadDescription(starter?.content ?? '', action.post.url, await fetchReplies(thread)),
         externalRef: action.post.url,
       });
       await postNote(thread, `Added to the game's to-do list as \`${id}\`.`);
