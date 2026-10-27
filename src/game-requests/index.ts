@@ -35,7 +35,7 @@ import {
   triageRow,
   type TriageAction,
 } from './triage.js';
-import { buildPoll, candidateList, isStale, rankCandidates, staleReason, weeklyVoteSchedule, type Candidate } from './weekly.js';
+import { buildPoll, candidateList, isStale, rankCandidates, staleReason, weeklyVoteSchedule, type Candidate, type PollKind } from './weekly.js';
 
 const modalPrefix = 'gr:submit:';
 const unavailableMessage = 'Game ideas and bug reports are unavailable right now. Let Kale know!';
@@ -113,18 +113,21 @@ function buildModal(type: SubmissionType): ModalBuilder {
 
 /**
  * Close New ideas nobody voted for in a while, then post a poll of the most-voted New ideas
- * (bug reports are fixed, not voted on). Skips the poll with fewer than two candidates
+ * (bug reports are fixed, not voted on). With fewer than two New ideas, poll the approved ideas
+ * that haven't shipped instead; with fewer than two of those too, skip the week
  */
 async function runWeeklyVote(loaded: GameRequestsForum, voteChannel: SendableChannels, now = new Date()): Promise<void> {
   const botName = loaded.forum.client.user.displayName;
-  const newIdeas = (await listPosts(loaded)).filter(thread => {
+  const ideas = (await listPosts(loaded)).flatMap(thread => {
     const { status, type } = readTags(thread.appliedTags, loaded.tagIds);
-    return status === statusTags.new && type === 'idea';
+    // Shipped ideas carry the Shipped tag instead of Approved, so they're left out here
+    return type === 'idea' && (status === statusTags.new || status === statusTags.approved) ? [{ thread, status }] : [];
   });
 
   const candidates: Candidate[] = [];
+  const approvedCandidates: Candidate[] = [];
 
-  for (const thread of newIdeas) {
+  for (const { thread, status } of ideas) {
     const starter = await thread.fetchStarterMessage().catch(() => null);
     const reaction = starter?.reactions.cache.get(voteEmoji);
     const candidate: Candidate = {
@@ -134,6 +137,12 @@ async function runWeeklyVote(loaded: GameRequestsForum, voteChannel: SendableCha
       votes: Math.max(0, (reaction?.count ?? 0) - (reaction?.me ? 1 : 0)),
       createdAt: thread.createdAt ?? now,
     };
+
+    // Only New ideas go stale; an approved idea is already on the game's to-do list
+    if (status === statusTags.approved) {
+      approvedCandidates.push(candidate);
+      continue;
+    }
 
     if (isStale(candidate, now)) {
       await applyDecision(loaded, thread, 'decline', botName, { reason: staleReason })
@@ -145,16 +154,18 @@ async function runWeeklyVote(loaded: GameRequestsForum, voteChannel: SendableCha
     candidates.push(candidate);
   }
 
-  const top = rankCandidates(candidates);
+  const newTop = rankCandidates(candidates);
+  const approvedTop = rankCandidates(approvedCandidates);
+  const [kind, top]: [PollKind, Candidate[]] = newTop.length >= 2 ? ['new', newTop] : ['build-next', approvedTop];
 
   if (top.length < 2) {
-    console.log(`Weekly vote: skipped, ${top.length} New idea(s) is too few for a poll`);
+    console.log(`Weekly vote: skipped, ${newTop.length} New and ${approvedTop.length} approved idea(s) are too few for a poll`);
     return;
   }
 
-  await voteChannel.send({ poll: buildPoll(top) });
-  await voteChannel.send({ content: candidateList(top), allowedMentions: { parse: [] } });
-  console.log(`Weekly vote: polled ${top.length} ideas`);
+  await voteChannel.send({ poll: buildPoll(top, kind) });
+  await voteChannel.send({ content: candidateList(top, kind), allowedMentions: { parse: [] } });
+  console.log(`Weekly vote: polled ${top.length} ${kind === 'new' ? 'New' : 'approved'} ideas`);
 }
 
 /**

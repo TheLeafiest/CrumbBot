@@ -15,6 +15,15 @@ const weekMs = 7 * 24 * 60 * 60 * 1000;
 export const staleReason = `It didn't get any votes in ${staleAfterWeeks} weeks, so it was closed to keep the list tidy. `
   + 'An approver can reopen it if interest picks up!';
 
+// 'new': New ideas, to help choose what to approve. 'build-next': the fallback when there are
+// too few New ideas, polling approved ideas that haven't shipped yet
+export type PollKind = 'new' | 'build-next';
+
+const pollQuestions: Record<PollKind, string> = {
+  'new': 'Which ideas should go into the game next?',
+  'build-next': 'Which approved idea should be built next?',
+};
+
 export interface Candidate {
   title: string;
   url: string;
@@ -41,9 +50,9 @@ const truncate = (text: string, max: number) => (text.length <= max ? text : `${
 /**
  * A multiple-choice poll of the candidates, numbered to match candidateList
  */
-export function buildPoll(candidates: readonly Candidate[]): PollData {
+export function buildPoll(candidates: readonly Candidate[], kind: PollKind = 'new'): PollData {
   return {
-    question: { text: 'Which ideas should go into the game next?' },
+    question: { text: pollQuestions[kind] },
     answers: candidates.map((candidate, i) => {
       const prefix = `${i + 1}. `;
       return { text: `${prefix}${truncate(candidate.title, pollAnswerMaxLength - prefix.length)}` };
@@ -56,12 +65,20 @@ export function buildPoll(candidates: readonly Candidate[]): PollData {
 /**
  * The message after the poll, linking each candidate's post so people can read it first
  */
-export function candidateList(candidates: readonly Candidate[]): string {
+export function candidateList(candidates: readonly Candidate[], kind: PollKind = 'new'): string {
   const lines = candidates.map((candidate, i) => {
     // Brackets in a title would break the link markdown
     const title = truncate(candidate.title, 100).replace(/[[\]]/g, '');
     return `${i + 1}. [${title}](${candidate.url}) · ${candidate.votes} 👍`;
   });
+
+  if (kind === 'build-next') {
+    return [
+      `Not enough new ideas for a vote this week, so here are approved ideas still waiting to be built. Which should come next? Vote above! The poll closes in ${pollHours} hours.`,
+      ...lines,
+      '-# Got an idea of your own? Suggest it with /idea',
+    ].join('\n');
+  }
 
   return [`This week's candidates, from the ideas with the most 👍. Read them, then vote above! The poll closes in ${pollHours} hours.`, ...lines].join('\n');
 }

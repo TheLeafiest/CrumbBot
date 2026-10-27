@@ -92,6 +92,46 @@ test('closes ideas with no votes after 4 weeks, but never bug reports', async ()
   assert.deepEqual(liked.state.appliedTags, [tagId('Idea'), tagId('New')]);
 });
 
-test('skips the poll with fewer than two New ideas', async () => {
-  assert.deepEqual(await runVote([fakePost('lonely', { votes: 5 })]), []);
+test('with fewer than two New ideas, polls the approved ideas that haven\'t shipped, with a nudge', async () => {
+  const sent = await runVote([
+    fakePost('lonely', { votes: 5 }),
+    fakePost('hammer', { status: 'Approved', votes: 1 }),
+    fakePost('cannons', { status: 'Approved', votes: 4 }),
+    fakePost('shipped-towers', { status: 'Shipped', votes: 9 }),
+    fakePost('approved-bug', { type: 'Bug', status: 'Approved', votes: 9 }),
+  ]);
+
+  const [poll, list] = sent as [{ poll: { question: { text: string }; answers: { text: string }[] } }, { content: string }];
+  assert.equal(poll.poll.question.text, 'Which approved idea should be built next?');
+  assert.deepEqual(poll.poll.answers.map(answer => answer.text), ['1. cannons', '2. hammer']);
+  assert.match(list.content, /^Not enough new ideas for a vote this week/);
+  assert.match(list.content, /Suggest it with \/idea$/);
+});
+
+test('approved ideas are never closed for lack of votes', async () => {
+  const oldApproved = fakePost('old-approved', { status: 'Approved', daysOld: 60 });
+  await runVote([oldApproved, fakePost('other-approved', { status: 'Approved' })]);
+
+  assert.deepEqual(oldApproved.state.appliedTags, [tagId('Idea'), tagId('Approved')]);
+});
+
+test('two New ideas still get the usual poll, even with approved ideas waiting', async () => {
+  const sent = await runVote([
+    fakePost('hats'),
+    fakePost('grenades'),
+    fakePost('hammer', { status: 'Approved', votes: 9 }),
+    fakePost('cannons', { status: 'Approved', votes: 9 }),
+  ]);
+
+  const [poll] = sent as [{ poll: { question: { text: string }; answers: { text: string }[] } }];
+  assert.equal(poll.poll.question.text, 'Which ideas should go into the game next?');
+  assert.deepEqual(poll.poll.answers.map(answer => answer.text.replace(/^\d+\. /, '')).sort(), ['grenades', 'hats']);
+});
+
+test('skips the week with fewer than two New and fewer than two unshipped approved ideas', async () => {
+  assert.deepEqual(await runVote([
+    fakePost('lonely', { votes: 5 }),
+    fakePost('hammer', { status: 'Approved' }),
+    fakePost('shipped-towers', { status: 'Shipped' }),
+  ]), []);
 });
